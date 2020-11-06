@@ -20,6 +20,7 @@ add_executable (RemotePlayWhatever WIN32
  "RemoteApp.cpp"
  "ClientTasks.h" 
  "ClientTasks.cpp"
+ "appresource.rc"
 )
 
 target_compile_definitions(RemotePlayWhatever PRIVATE STEAMWORKS_CLIENT_INTERFACES)

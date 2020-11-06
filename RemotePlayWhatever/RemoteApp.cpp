@@ -22,7 +22,8 @@ bool RemoteApp::OnInit()
     m_callbackRunner.Start(200);
 
     m_taskBarIcon = new RemoteAppTaskBarIcon();
-    m_taskBarIcon->SetIcon(wxICON(sample), wxT("Steam Remote Play Whatever"));
+    m_taskBarIcon->SetIcon(wxICON(ID_APPICON), wxT("Steam Remote Play Whatever"));
+    m_taskBarIcon->ShowBalloon(wxT("Steam Remote Play Whatever"), wxT("Started"));
 
     return true;
 }
@@ -56,24 +57,43 @@ wxMenu* RemoteAppTaskBarIcon::CreatePopupMenu()
 {
     m_dynamicFriends.clear();
 
-    wxMenu* menu = new wxMenu;
-    wxMenu* submenuSteam = new wxMenu;
-    for (int i = 0; i < GClientContext()->ClientFriends()->GetFriendCount(k_EFriendFlagImmediate); ++i)
+    wxMenu* menu = new wxMenu();
+    if (GClientContext()->ClientUser()->BLoggedOn() && GClientContext()->ClientUser()->BIsAnyGameRunning())
     {
-        CSteamID idFriend = GClientContext()->ClientFriends()->GetFriendByIndex(i, k_EFriendFlagImmediate);
-        if (GClientContext()->ClientFriends()->GetFriendPersonaState(idFriend) != k_EPersonaStateOffline)
-        {
-            m_dynamicFriends[i] = idFriend.ConvertToUint64();
-            wxMenuItem* friendItem = submenuSteam->Append(i, wxString(
-                GClientContext()->ClientFriends()->GetFriendPersonaName(idFriend),
-                wxConvUTF8
-            ));
+        // save friends index and name in multimap to have them sorted in context menu later
+        auto comparator = [](const wxString& lhs, const wxString& rhs) {
+            return lhs.Lower() < rhs.Lower();
+        };
+        std::multimap<wxString, int, decltype(comparator)> friendsItems(comparator);
 
-            Bind(wxEVT_MENU, &RemoteAppTaskBarIcon::OnMenuSteamFriend, this, wxID_ANY, wxID_ANY);
+        wxMenu* submenuSteam = new wxMenu();
+        for (int i = 0; i < GClientContext()->ClientFriends()->GetFriendCount(k_EFriendFlagImmediate); ++i)
+        {
+            CSteamID idFriend = GClientContext()->ClientFriends()->GetFriendByIndex(i, k_EFriendFlagImmediate);
+            if (GClientContext()->ClientFriends()->GetFriendPersonaState(idFriend) != k_EPersonaStateOffline)
+            {
+                friendsItems.insert(std::pair<wxString, int>(
+                    wxString(GClientContext()->ClientFriends()->GetFriendPersonaName(idFriend), wxConvUTF8), 
+                    i
+                ));
+
+                m_dynamicFriends[i] = idFriend.ConvertToUint64();
+            }
         }
+
+        for (auto it = friendsItems.cbegin(); it != friendsItems.cend(); ++it)
+        {
+            submenuSteam->Append(it->second, it->first);
+            Bind(wxEVT_MENU, &RemoteAppTaskBarIcon::OnMenuSteamFriend, this);
+        }
+
+        menu->Append(wxID_ANY, wxT("Send remote play invite to..."), submenuSteam);
+    }
+    else
+    {
+        menu->Append(wxID_ANY, "Not in game")->Enable(false);
     }
 
-    menu->Append(wxID_ANY, wxT("Friends"), submenuSteam);
     menu->AppendSeparator();
     menu->Append(TRAY_EXIT, wxT("E&xit"));
 

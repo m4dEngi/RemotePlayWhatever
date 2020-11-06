@@ -85,7 +85,7 @@ void RemotePlayInviteTask::OnRemotePlayStart(RemoteClientStartStreamSession_t* s
 {
     if (m_runningAppId == 0)
     {
-        char buf[512] = { '\0' };
+        char buf[256] = { '\0' };
         std::string authKey;
         char hexBuf[3] = { '\0' };
         for (int i = 0; i < startCB->m_cubAuthToken; ++i)
@@ -97,7 +97,7 @@ void RemotePlayInviteTask::OnRemotePlayStart(RemoteClientStartStreamSession_t* s
         sprintf(buf, 
             "Please open this link in your default browser to join: steam://remoteplay/connect/%llu?appid=%d&auth=%s&transport=k_EStreamTransportSDR&relay=%s&restricted_countries=CN,XC", 
             GClientContext()->ClientUser()->GetSteamID().ConvertToUint64(), 
-            480, 
+            480,
             authKey.c_str(), 
             startCB->m_szRelayServer
         );

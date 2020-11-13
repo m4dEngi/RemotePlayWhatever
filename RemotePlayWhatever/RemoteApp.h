@@ -4,15 +4,13 @@
 #include <wx/wx.h>
 #include <wx/taskbar.h>
 #include <map>
-#include <Steamworks.h>
+#include "RemoteInviteHandler.h"
 
 enum
 {
     TRAY_EXIT,
-    TRAY_FRIEND,
-    TRAY_DYNAMIC
+    TRAY_FRIEND
 };
-
 
 class RemoteAppTaskBarIcon : public wxTaskBarIcon
 {
@@ -25,7 +23,10 @@ public:
     virtual wxMenu* CreatePopupMenu();
 
 private:
+    wxMenu* BuildFriendsMenu();
+
     std::map<int, uint64> m_dynamicFriends;
+    RemotePlayInviteHandler m_remoteInvite;
 };
 
 

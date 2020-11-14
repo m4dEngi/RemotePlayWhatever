@@ -19,11 +19,11 @@ ClientContext::~ClientContext()
     {
         if (m_hUser)
         {
-            m_pClientEngine->ReleaseUser(m_hPipe, m_hUser);
+            m_pSteamClient->ReleaseUser(m_hPipe, m_hUser);
         }
-        m_pClientEngine->BReleaseSteamPipe(m_hPipe);
+        m_pSteamClient->BReleaseSteamPipe(m_hPipe);
     }
-    m_pClientEngine->BShutdownIfAllPipesClosed();
+    m_pSteamClient->BShutdownIfAllPipesClosed();
 }
 
 bool ClientContext::Init()
@@ -74,8 +74,6 @@ bool ClientContext::Init()
     {
         return false;
     }
-
-
 
     return true;
 }

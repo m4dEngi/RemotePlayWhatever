@@ -4,7 +4,7 @@
 #include <wx/wx.h>
 #include <wx/taskbar.h>
 #include <map>
-#include "RemoteInviteHandler.h"
+#include "SteamStuff.h"
 
 enum
 {

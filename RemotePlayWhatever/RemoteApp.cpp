@@ -1,5 +1,5 @@
 #include "RemoteApp.h"
-#include "ClientContext.h"
+#include "SteamStuff.h"
 
 bool RemoteApp::OnInit()
 {
@@ -62,13 +62,13 @@ wxMenu* RemoteAppTaskBarIcon::BuildFriendsMenu()
     std::multimap<wxString, int, decltype(comparator)> friendsItems(comparator);
 
     wxMenu* submenuSteam = new wxMenu();
-    for (int i = 0; i < GClientContext()->ClientFriends()->GetFriendCount(k_EFriendFlagImmediate); ++i)
+    for (int i = 0; i < GClientContext()->SteamFriends()->GetFriendCount(k_EFriendFlagImmediate); ++i)
     {
-        CSteamID idFriend = GClientContext()->ClientFriends()->GetFriendByIndex(i, k_EFriendFlagImmediate);
-        if (GClientContext()->ClientFriends()->GetFriendPersonaState(idFriend) != k_EPersonaStateOffline)
+        CSteamID idFriend = GClientContext()->SteamFriends()->GetFriendByIndex(i, k_EFriendFlagImmediate);
+        if (GClientContext()->SteamFriends()->GetFriendPersonaState(idFriend) != k_EPersonaStateOffline)
         {
             friendsItems.insert(std::pair<wxString, int>(
-                wxString(GClientContext()->ClientFriends()->GetFriendPersonaName(idFriend), wxConvUTF8),
+                wxString(GClientContext()->SteamFriends()->GetFriendPersonaName(idFriend), wxConvUTF8),
                 i
                 ));
 
@@ -88,7 +88,7 @@ wxMenu* RemoteAppTaskBarIcon::BuildFriendsMenu()
 wxMenu* RemoteAppTaskBarIcon::CreatePopupMenu()
 {
     wxMenu* menu = new wxMenu();
-    if (GClientContext()->ClientUser()->BLoggedOn() && GClientContext()->ClientUser()->BIsAnyGameRunning())
+    if (GClientContext()->SteamUser()->BLoggedOn() && GetRunningGameID().IsValid())
     {
         menu->Append(wxID_ANY, wxT("Send remote play invite to..."), BuildFriendsMenu());
     }

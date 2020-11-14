@@ -13,10 +13,8 @@ set(OSW_LIB_PATH "..\\..\\..\\..\\open-steamworks\\OpenSteamAPI\\lib\\Win32\\Ope
 add_executable (RemotePlayWhatever WIN32
  "RemotePlayWhatever.cpp" 
  "RemotePlayWhatever.h"
- "RemoteInviteHandler.cpp"
- "RemoteInviteHandler.h"
- "ClientContext.h" 
- "ClientContext.cpp"
+ "SteamStuff.h" 
+ "SteamStuff.cpp"
  "RemoteApp.h" 
  "RemoteApp.cpp"
  "appresource.rc"

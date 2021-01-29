@@ -9,7 +9,17 @@
 enum
 {
     TRAY_EXIT,
-    TRAY_FRIEND
+    TRAY_FRIEND,
+};
+
+class wxSteamID : public wxObject
+{
+public:
+    wxSteamID(CSteamID steamID);
+    CSteamID GetSteamID();
+
+private:
+    CSteamID m_steamID;
 };
 
 class RemoteAppTaskBarIcon : public wxTaskBarIcon
@@ -25,7 +35,6 @@ public:
 private:
     wxMenu* BuildFriendsMenu();
 
-    std::map<int, uint64> m_dynamicFriends;
     RemotePlayInviteHandler m_remoteInvite;
 };
 

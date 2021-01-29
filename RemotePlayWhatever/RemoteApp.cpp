@@ -41,6 +41,16 @@ int RemoteApp::OnExit()
 
 // system tray icon/menu
 
+wxSteamID::wxSteamID(CSteamID steamID):
+    m_steamID(steamID)
+{
+}
+
+CSteamID wxSteamID::GetSteamID()
+{
+    return m_steamID;
+}
+
 void RemoteAppTaskBarIcon::OnMenuExit(wxCommandEvent&)
 {
     wxTheApp->Exit();
@@ -48,18 +58,16 @@ void RemoteAppTaskBarIcon::OnMenuExit(wxCommandEvent&)
 
 void RemoteAppTaskBarIcon::OnMenuSteamFriend(wxCommandEvent& evt)
 {
-    m_remoteInvite.SendInvite(CSteamID(m_dynamicFriends[evt.GetId()]));
+    m_remoteInvite.SendInvite(((wxSteamID*)evt.GetEventUserData())->GetSteamID());
 }
 
 wxMenu* RemoteAppTaskBarIcon::BuildFriendsMenu()
 {
-    m_dynamicFriends.clear();
-
     // save friends index and name in multimap to have them sorted in context menu later
     auto comparator = [](const wxString& lhs, const wxString& rhs) {
         return lhs.Lower() < rhs.Lower();
     };
-    std::multimap<wxString, int, decltype(comparator)> friendsItems(comparator);
+    std::multimap<wxString, CSteamID, decltype(comparator)> friendsItems(comparator);
 
     wxMenu* submenuSteam = new wxMenu();
     for (int i = 0; i < GClientContext()->SteamFriends()->GetFriendCount(k_EFriendFlagImmediate); ++i)
@@ -67,19 +75,17 @@ wxMenu* RemoteAppTaskBarIcon::BuildFriendsMenu()
         CSteamID idFriend = GClientContext()->SteamFriends()->GetFriendByIndex(i, k_EFriendFlagImmediate);
         if (GClientContext()->SteamFriends()->GetFriendPersonaState(idFriend) != k_EPersonaStateOffline)
         {
-            friendsItems.insert(std::pair<wxString, int>(
+            friendsItems.insert(std::pair<wxString, CSteamID>(
                 wxString(GClientContext()->SteamFriends()->GetFriendPersonaName(idFriend), wxConvUTF8),
-                i
+                idFriend
                 ));
-
-            m_dynamicFriends[i] = idFriend.ConvertToUint64();
         }
     }
 
     for (auto it = friendsItems.cbegin(); it != friendsItems.cend(); ++it)
     {
-        submenuSteam->Append(it->second, it->first);
-        Bind(wxEVT_MENU, &RemoteAppTaskBarIcon::OnMenuSteamFriend, this);
+        wxMenuItem* item = submenuSteam->Append(wxID_ANY, it->first);
+        Bind(wxEVT_MENU, &RemoteAppTaskBarIcon::OnMenuSteamFriend, this, item->GetId(), wxID_ANY, new wxSteamID(it->second));
     }
 
     return submenuSteam;
@@ -111,3 +117,4 @@ void RemoteAppCallbackRunner::Notify()
 {
     GClientContext()->RunCallbacks();
 }
+

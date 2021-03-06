@@ -1,6 +1,11 @@
 #include "RemoteApp.h"
 #include "SteamStuff.h"
 
+#ifdef __linux__
+#include <wx/notifmsg.h>
+#include "appicon.xpm"
+#endif
+
 bool RemoteApp::OnInit()
 {
     if (!wxApp::OnInit())
@@ -21,8 +26,14 @@ bool RemoteApp::OnInit()
     m_callbackRunner.Start(200);
 
     m_taskBarIcon = new RemoteAppTaskBarIcon();
+#ifdef _WIN32
     m_taskBarIcon->SetIcon(wxICON(ID_APPICON), wxT("Steam Remote Play Whatever"));
     m_taskBarIcon->ShowBalloon(wxT("Steam Remote Play Whatever"), wxT("Started"));
+#elif __linux__
+    m_taskBarIcon->SetIcon(wxICON(appicon), wxT("Steam Remote Play Whatever"));
+    wxNotificationMessage notifMsg(wxT("Steam Remote Play Whatever"), wxT("Started"));
+    notifMsg.Show();
+#endif
 
     return true;
 }

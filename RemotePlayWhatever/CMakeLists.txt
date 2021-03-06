@@ -23,12 +23,9 @@ set(APPSRCs	"RemotePlayWhatever.cpp"
 )
 
 if(${CMAKE_HOST_SYSTEM_NAME} MATCHES "Windows")
-	add_executable (RemotePlayWhatever WIN32 ${APPSRCs}
-		"appresource.rc"
-	)
+	add_executable (RemotePlayWhatever WIN32 ${APPSRCs} "appresource.rc")
 elseif(${CMAKE_HOST_SYSTEM_NAME} MATCHES "Linux")
 	add_executable (RemotePlayWhatever ${APPSRCs})
-	target_link_libraries(RemotePlayWhatever ${CMAKE_DL_LIBS})
 else()
 	message(FATAL_ERROR "Unsupported platform!")
 endif()
@@ -36,3 +33,6 @@ endif()
 target_compile_definitions(RemotePlayWhatever PRIVATE STEAMWORKS_CLIENT_INTERFACES)
 target_include_directories(RemotePlayWhatever PUBLIC ${OSW_INCLUDE_PATH} ${wxWidgets_INCLUDE_DIRS})
 target_link_libraries(RemotePlayWhatever ${OSW_LIB_PATH} ${wxWidgets_LIBRARIES})
+if(${CMAKE_HOST_SYSTEM_NAME} MATCHES "Linux")
+	target_link_libraries(RemotePlayWhatever ${CMAKE_DL_LIBS})
+endif()

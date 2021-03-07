@@ -35,4 +35,18 @@ target_include_directories(RemotePlayWhatever PUBLIC ${OSW_INCLUDE_PATH} ${wxWid
 target_link_libraries(RemotePlayWhatever ${OSW_LIB_PATH} ${wxWidgets_LIBRARIES})
 if(${CMAKE_HOST_SYSTEM_NAME} MATCHES "Linux")
 	target_link_libraries(RemotePlayWhatever ${CMAKE_DL_LIBS})
+	set_target_properties(RemotePlayWhatever PROPERTIES OUTPUT_NAME "remoteplaywhatever")
+	install(TARGETS RemotePlayWhatever DESTINATION "bin")
+
+	file(READ "/etc/issue" ISSUE)
+	string(REGEX MATCH "Debian|Ubuntu" DISTRO ${ISSUE})
+	if(DISTRO MATCHES "Ubuntu" OR DISTRO MATCHES "Debian")
+		set(CPACK_GENERATOR "DEB")
+		set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Lets you force steam remote play together for any game")
+		set(CPACK_PACKAGE_DESCRIPTION "Tiny app that lets you force steam remote play together for any game")
+		set(CPACK_DEBIAN_PACKAGE_MAINTAINER "m4dEngi")
+		set(CPACK_DEBIAN_PACKAGE_DEPENDS "libwxbase3.0-0v5 (>= 3.0.4+dfsg), libwxgtk3.0-gtk3-0v5 (>= 3.0.4+dfsg)")
+		include(CPack)
+	endif()
 endif()
+

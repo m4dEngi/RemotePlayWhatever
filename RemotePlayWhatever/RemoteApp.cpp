@@ -72,6 +72,11 @@ void RemoteAppTaskBarIcon::OnMenuSteamFriend(wxCommandEvent& evt)
     m_remoteInvite.SendInvite(((wxSteamID*)evt.GetEventUserData())->GetSteamID());
 }
 
+void RemoteAppTaskBarIcon::OnMenuCopyRemotePlayLink(wxCommandEvent&)
+{
+    m_remoteInvite.SendInvite(CSteamID(0, k_EUniversePublic, k_EAccountTypeIndividual));
+}
+
 wxMenu* RemoteAppTaskBarIcon::BuildFriendsMenu()
 {
     // save friends index and name in multimap to have them sorted in context menu later
@@ -108,6 +113,8 @@ wxMenu* RemoteAppTaskBarIcon::CreatePopupMenu()
     if (GClientContext()->SteamUser()->BLoggedOn() && GetRunningGameID().IsValid())
     {
         menu->Append(wxID_ANY, wxT("Send remote play invite to..."), BuildFriendsMenu());
+        menu->Append(TRAY_COPYLINK, wxT("C&reate remote play invite link"));
+        Bind(wxEVT_MENU, &RemoteAppTaskBarIcon::OnMenuCopyRemotePlayLink, this, TRAY_COPYLINK);
     }
     else
     {
@@ -116,7 +123,6 @@ wxMenu* RemoteAppTaskBarIcon::CreatePopupMenu()
 
     menu->AppendSeparator();
     menu->Append(TRAY_EXIT, wxT("E&xit"));
-
     Bind(wxEVT_MENU, &RemoteAppTaskBarIcon::OnMenuExit, this, TRAY_EXIT);
 
     return menu;

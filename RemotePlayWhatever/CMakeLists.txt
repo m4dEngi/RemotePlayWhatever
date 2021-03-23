@@ -20,6 +20,8 @@ set(APPSRCs	"RemotePlayWhatever.cpp"
 			"SteamStuff.cpp"
 			"RemoteApp.h"
 			"RemoteApp.cpp"
+			"RemotePlayInviteHandler.h"
+			"RemotePlayInviteHandler.cpp"
 )
 
 if(${CMAKE_HOST_SYSTEM_NAME} MATCHES "Windows")

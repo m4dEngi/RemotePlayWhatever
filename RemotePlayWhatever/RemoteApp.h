@@ -5,11 +5,13 @@
 #include <wx/taskbar.h>
 #include <map>
 #include "SteamStuff.h"
+#include "RemotePlayInviteHandler.h"
 
 enum
 {
     TRAY_EXIT,
     TRAY_FRIEND,
+    TRAY_COPYLINK
 };
 
 class wxSteamID : public wxObject
@@ -29,6 +31,7 @@ public:
 
     void OnMenuExit(wxCommandEvent&);
     void OnMenuSteamFriend(wxCommandEvent&);
+    void OnMenuCopyRemotePlayLink(wxCommandEvent&);
 
     virtual wxMenu* CreatePopupMenu();
 

@@ -20,7 +20,7 @@ void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
         return;
     }
 
-    RemotePlayPlayer_t rppInvitee = { invitee, m_remoteGuestID };
+    RemotePlayPlayer_t rppInvitee = { invitee, m_remoteGuestID, 0, 0, 0 };
     ++m_remoteGuestID;
 
     if (gameID.IsSteamApp())
@@ -39,11 +39,11 @@ void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
 
 void RemotePlayInviteHandler::OnRemotePlayInviteResult(RemotePlayInviteResult_t* inviteResultCb)
 {
-    if (inviteResultCb->m_eResult != k_EResultOK)
+    if (inviteResultCb->m_eResult != k_ERemoteClientLaunchResultOK)
     {
         wxMessageBox(
-            wxString::Format("Could not create remote play session! (EResult:%d)", inviteResultCb->m_eResult), 
-            "Remote Play Whatever", 
+            wxString::Format("Could not create remote play session! (Result:%d)", inviteResultCb->m_eResult), 
+            "Remote Play Whatever",
             wxOK | wxICON_ERROR
         );
     }
@@ -66,5 +66,6 @@ void RemotePlayInviteHandler::OnRemotePlayStop(RemoteClientStopStreamSession_t* 
         )
     {
         GClientContext()->RemoteClientManager()->SetStreamingDesktopToRemotePlayTogetherEnabled(false);
+        m_remoteGuestID = 1;
     }
 }

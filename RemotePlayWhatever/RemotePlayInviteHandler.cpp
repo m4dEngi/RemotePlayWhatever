@@ -33,7 +33,7 @@ void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
 
         m_enabledDesktopStreaming = true;
 
-        GClientContext()->RemoteClientManager()->CreateRemotePlayInviteAndSession(rppInvitee, 753);
+        GClientContext()->RemoteClientManager()->CreateRemotePlayInviteAndSession(rppInvitee, 440);
     }
 }
 

@@ -3,7 +3,7 @@
 #
 cmake_minimum_required (VERSION 3.8)
 
-project ("RemotePlayWhatever" VERSION 0.1.11)
+project ("RemotePlayWhatever" VERSION 0.1.12)
 
 # Include sub-projects.
 add_subdirectory ("RemotePlayWhatever")

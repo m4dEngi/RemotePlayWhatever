@@ -10,12 +10,15 @@ ClientContext::ClientContext():
     m_pSteamFriends(nullptr),
     m_pSteamClient(nullptr),
     m_pClientEngine(nullptr),
-    m_pClientRemoteManager(nullptr)
+    m_pClientRemoteManager(nullptr),
+    m_ShuttingDown(false)
 {
 }
 
 ClientContext::~ClientContext()
 {
+    m_ShuttingDown = true;
+
     if (m_hPipe)
     {
         if (m_hUser)
@@ -91,7 +94,10 @@ ISteamFriends015* ClientContext::SteamFriends()
 
 void ClientContext::RunCallbacks()
 {
-    Steam_RunCallbacks(m_hPipe, false);
+    if(!m_ShuttingDown)
+    {
+        Steam_RunCallbacks(m_hPipe, false);
+    }
 }
 
 IClientRemoteClientManager* ClientContext::RemoteClientManager()

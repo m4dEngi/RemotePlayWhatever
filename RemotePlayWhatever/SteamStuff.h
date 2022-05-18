@@ -28,6 +28,7 @@ private:
     IClientEngine* m_pClientEngine;
     IClientRemoteClientManager* m_pClientRemoteManager;
     
+    bool m_ShuttingDown;
 };
 
 ClientContext* GClientContext();

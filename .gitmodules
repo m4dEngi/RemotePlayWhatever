@@ -1,0 +1,3 @@
+[submodule "open-steamworks"]
+	path = open-steamworks
+	url = https://github.com/m4dEngi/open-steamworks.git

@@ -12,7 +12,7 @@ Make sure you have cmake and wxWidgets installed first
 5. cmake ../
 6. make
 
-Optional ond deb/ubuntu system you can run ``make package`` to build *.deb package
+Optional on deb/ubuntu system you can run ``make package`` to build *.deb package
 
 #### Windows
 1. git clone --recurse-submodules https://github.com/m4dEngi/RemotePlayWhatever.git

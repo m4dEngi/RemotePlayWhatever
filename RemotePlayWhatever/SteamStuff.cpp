@@ -17,21 +17,15 @@ ClientContext::ClientContext():
 
 ClientContext::~ClientContext()
 {
-    m_ShuttingDown = true;
-
-    if (m_hPipe)
-    {
-        if (m_hUser)
-        {
-            m_pSteamClient->ReleaseUser(m_hPipe, m_hUser);
-        }
-        m_pSteamClient->BReleaseSteamPipe(m_hPipe);
-    }
-    m_pSteamClient->BShutdownIfAllPipesClosed();
 }
 
 bool ClientContext::Init()
 {
+    if(m_Initialized)
+    {
+        return true;
+    }
+
     if (!OpenAPI_LoadLibrary())
     {
         return false;
@@ -67,6 +61,12 @@ bool ClientContext::Init()
         return false;
     }
 
+    m_pSteamUtils = (ISteamUtils009*)m_pSteamClient->GetISteamUtils(m_hPipe, STEAMUTILS_INTERFACE_VERSION_009);
+    if(!m_pSteamUtils)
+    {
+        return false;
+    }
+
     m_pClientEngine = (IClientEngine*)SteamInternal_CreateInterface(CLIENTENGINE_INTERFACE_VERSION);
     if (!m_pClientEngine)
     {
@@ -79,7 +79,29 @@ bool ClientContext::Init()
         return false;
     }
 
-    return true;
+    return m_Initialized = true;
+}
+
+void ClientContext::Shutdown()
+{
+    if(m_ShuttingDown)
+    {
+        return;
+    }
+
+    m_ShuttingDown = true;
+
+    if (m_hPipe)
+    {
+        if (m_hUser)
+        {
+            m_pSteamClient->ReleaseUser(m_hPipe, m_hUser);
+        }
+        if(m_pSteamClient->BReleaseSteamPipe(m_hPipe))
+        {
+            m_pSteamClient->BShutdownIfAllPipesClosed();
+        }
+    }
 }
 
 ISteamUser019* ClientContext::SteamUser()
@@ -90,6 +112,11 @@ ISteamUser019* ClientContext::SteamUser()
 ISteamFriends015* ClientContext::SteamFriends()
 {
     return m_pSteamFriends;
+}
+
+ISteamUtils009 *ClientContext::SteamUtils()
+{
+    return m_pSteamUtils;
 }
 
 void ClientContext::RunCallbacks()
@@ -123,3 +150,5 @@ CGameID GetRunningGameID()
 
     return CGameID();
 }
+
+

@@ -1,10 +1,18 @@
+#include <wx/cmdline.h>
 #include "RemoteApp.h"
-#include "SteamStuff.h"
+#include "wxSteamStuff.h"
+#include "FriendsListFrame.h"
 
-#ifdef __linux__
-#include <wx/notifmsg.h>
-#include "appicon.xpm"
-#endif
+static const wxCmdLineEntryDesc cmdLineDesc[] =
+{
+    { wxCMD_LINE_SWITCH, "v", "verbose", "verbose output" },
+    { wxCMD_LINE_SWITCH, "h", "help", "show this help message" },
+    { wxCMD_LINE_OPTION, "a", "appid", "appid for non-steam games", wxCMD_LINE_VAL_NUMBER },
+    { wxCMD_LINE_OPTION, "i", "invitee", "SteamID64 invitee ( use 0 for guest link )", wxCMD_LINE_VAL_STRING },
+    { wxCMD_LINE_NONE }
+};
+
+OneShotInvite* g_oneshot = nullptr;
 
 bool RemoteApp::OnInit()
 {
@@ -16,24 +24,38 @@ bool RemoteApp::OnInit()
         wxMessageBox
         (
             "Could not initialize steam client library!",
-            "Warning",
+            "Error",
             wxOK | wxICON_ERROR
         );
 
         wxTheApp->Exit();
     }
 
+    if (!GClientContext()->SteamUser()->BLoggedOn() || !GetRunningGameID().IsValid())
+    {
+        wxMessageBox
+        (
+            "Could not detect game running. Start a game first!",
+            "No game runnunig!",
+            wxOK | wxICON_INFORMATION
+        );
+
+        GClientContext()->Shutdown();
+
+        wxTheApp->Exit();
+    }
+
     m_callbackRunner.Start(200);
 
-    m_taskBarIcon = new RemoteAppTaskBarIcon();
-#ifdef _WIN32
-    m_taskBarIcon->SetIcon(wxICON(ID_APPICON), wxT("Steam Remote Play Whatever"));
-    m_taskBarIcon->ShowBalloon(wxT("Steam Remote Play Whatever"), wxT("Started"));
-#elif __linux__
-    m_taskBarIcon->SetIcon(wxICON(appicon), wxT("Steam Remote Play Whatever"));
-    wxNotificationMessage notifMsg(wxT("Steam Remote Play Whatever"), wxT("Started"));
-    notifMsg.Show();
-#endif
+    if(!g_oneshot)
+    {
+        m_friendsList = new FriendsListFrame(&m_inviteHandler);
+        m_friendsList->Show(true);
+    }
+    else
+    {
+        g_oneshot->Send();
+    }
 
     return true;
 }
@@ -45,93 +67,63 @@ int RemoteApp::OnExit()
         m_callbackRunner.Stop();
     }
 
-    m_taskBarIcon->RemoveIcon();
+    GClientContext()->Shutdown();
 
     return 0;
 }
 
-// system tray icon/menu
-
-wxSteamID::wxSteamID(CSteamID steamID):
-    m_steamID(steamID)
+bool RemoteApp::OnCmdLineParsed(wxCmdLineParser &parser)
 {
-}
-
-CSteamID wxSteamID::GetSteamID()
-{
-    return m_steamID;
-}
-
-void RemoteAppTaskBarIcon::OnMenuExit(wxCommandEvent&)
-{
-    wxTheApp->Exit();
-}
-
-void RemoteAppTaskBarIcon::OnMenuSteamFriend(wxCommandEvent& evt)
-{
-    m_remoteInvite.SendInvite(((wxSteamID*)evt.GetEventUserData())->GetSteamID());
-}
-
-void RemoteAppTaskBarIcon::OnMenuCopyRemotePlayLink(wxCommandEvent&)
-{
-    m_remoteInvite.SendInvite(CSteamID(0, k_EUniversePublic, k_EAccountTypeIndividual));
-}
-
-wxMenu* RemoteAppTaskBarIcon::BuildFriendsMenu()
-{
-    // save friends index and name in multimap to have them sorted in context menu later
-    auto comparator = [](const wxString& lhs, const wxString& rhs) {
-        return lhs.Lower() < rhs.Lower();
-    };
-    std::multimap<wxString, CSteamID, decltype(comparator)> friendsItems(comparator);
-
-    wxMenu* submenuSteam = new wxMenu();
-    for (int i = 0; i < GClientContext()->SteamFriends()->GetFriendCount(k_EFriendFlagImmediate); ++i)
+    long appID;
+    if(parser.Found("a", &appID))
     {
-        CSteamID idFriend = GClientContext()->SteamFriends()->GetFriendByIndex(i, k_EFriendFlagImmediate);
-        if (GClientContext()->SteamFriends()->GetFriendPersonaState(idFriend) != k_EPersonaStateOffline)
-        {
-            friendsItems.insert(std::pair<wxString, CSteamID>(
-                wxString(GClientContext()->SteamFriends()->GetFriendPersonaName(idFriend), wxConvUTF8),
-                idFriend
-                ));
-        }
+        m_inviteHandler.SetNonSteamAppID(appID);
     }
 
-    for (auto it = friendsItems.cbegin(); it != friendsItems.cend(); ++it)
+    wxString inviteeStr64;
+    if(parser.Found("i", &inviteeStr64))
     {
-        wxMenuItem* item = submenuSteam->Append(wxID_ANY, it->first);
-        Bind(wxEVT_MENU, &RemoteAppTaskBarIcon::OnMenuSteamFriend, this, item->GetId(), wxID_ANY, new wxSteamID(it->second));
+        uint64_t cliInvitee = std::strtoull(inviteeStr64.c_str(), NULL, 10);
+        g_oneshot = new OneShotInvite(CSteamID((uint64)cliInvitee), &m_inviteHandler);
     }
 
-    return submenuSteam;
+    return wxApp::OnCmdLineParsed(parser);
 }
 
-wxMenu* RemoteAppTaskBarIcon::CreatePopupMenu()
+void RemoteApp::OnInitCmdLine(wxCmdLineParser &parser)
 {
-    wxMenu* menu = new wxMenu();
-    if (GClientContext()->SteamUser()->BLoggedOn() && GetRunningGameID().IsValid())
-    {
-        menu->Append(wxID_ANY, wxT("Send remote play invite to..."), BuildFriendsMenu());
-        menu->Append(TRAY_COPYLINK, wxT("C&reate remote play invite link"));
-        Bind(wxEVT_MENU, &RemoteAppTaskBarIcon::OnMenuCopyRemotePlayLink, this, TRAY_COPYLINK);
-    }
-    else
-    {
-        menu->Append(wxID_ANY, "Not in game")->Enable(false);
-    }
-
-    menu->AppendSeparator();
-    menu->Append(TRAY_EXIT, wxT("E&xit"));
-    Bind(wxEVT_MENU, &RemoteAppTaskBarIcon::OnMenuExit, this, TRAY_EXIT);
-
-    return menu;
+    parser.SetDesc(cmdLineDesc);
 }
-
-// steam callback handler
 
 void RemoteAppCallbackRunner::Notify()
 {
     GClientContext()->RunCallbacks();
 }
+
+// tiny one shot invite handler
+OneShotInvite::OneShotInvite(CSteamID invitee, RemotePlayInviteHandler *handler):
+    m_invitee(invitee),
+    m_handler(handler),
+    m_remoteInviteResultCb(this, &OneShotInvite::OnRemotePlayInviteResult)
+{
+}
+
+void OneShotInvite::OnRemotePlayInviteResult(RemotePlayInviteResult_t* inviteResultCb)
+{
+    if (inviteResultCb->m_eResult == k_ERemoteClientLaunchResultOK)
+    {
+        std::cout << inviteResultCb->m_szConnectURL << std::endl;
+    }
+    else
+    {
+        std::cout << "Could not create remote play session: " << inviteResultCb->m_eResult << std::endl;
+    }
+    wxTheApp->Exit();
+}
+
+void OneShotInvite::Send()
+{
+    m_handler->SendInvite(m_invitee);
+}
+
 

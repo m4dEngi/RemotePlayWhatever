@@ -64,6 +64,12 @@ set(APPSRCs "RemotePlayWhatever.cpp"
             "RemoteApp.cpp"
             "RemotePlayInviteHandler.h"
             "RemotePlayInviteHandler.cpp"
+            "FriendsListFrame.h"
+            "FriendsListFrame.cpp"
+            "FriendPanel.h"
+            "FriendPanel.cpp"
+            "wxSteamStuff.h"
+            "wxSteamStuff.cpp"
 )
 
 if(${SYSTEM_OS} STREQUAL "Win")

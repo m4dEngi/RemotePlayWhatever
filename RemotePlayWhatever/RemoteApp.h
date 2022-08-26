@@ -7,40 +7,18 @@
 #include "SteamStuff.h"
 #include "RemotePlayInviteHandler.h"
 
-enum
-{
-    TRAY_EXIT,
-    TRAY_FRIEND,
-    TRAY_COPYLINK
-};
-
-class wxSteamID : public wxObject
+class OneShotInvite
 {
 public:
-    wxSteamID(CSteamID steamID);
-    CSteamID GetSteamID();
+    OneShotInvite(CSteamID invitee, RemotePlayInviteHandler* handler);
+    void Send();
 
 private:
-    CSteamID m_steamID;
+    CSteamID m_invitee;
+    RemotePlayInviteHandler* m_handler;
+
+    STEAM_CALLBACK(OneShotInvite, OnRemotePlayInviteResult, RemotePlayInviteResult_t, m_remoteInviteResultCb);
 };
-
-class RemoteAppTaskBarIcon : public wxTaskBarIcon
-{
-public:
-    RemoteAppTaskBarIcon() {}
-
-    void OnMenuExit(wxCommandEvent&);
-    void OnMenuSteamFriend(wxCommandEvent&);
-    void OnMenuCopyRemotePlayLink(wxCommandEvent&);
-
-    virtual wxMenu* CreatePopupMenu();
-
-private:
-    wxMenu* BuildFriendsMenu();
-
-    RemotePlayInviteHandler m_remoteInvite;
-};
-
 
 class RemoteAppCallbackRunner : public wxTimer
 {
@@ -52,11 +30,14 @@ class RemoteApp : public wxApp
 {
 public:
     virtual bool OnInit();
-    virtual int OnExit();
+    virtual int  OnExit();
+    virtual bool OnCmdLineParsed(wxCmdLineParser& parser);
+    virtual void OnInitCmdLine(wxCmdLineParser& parser);
 
 protected:
-    RemoteAppTaskBarIcon* m_taskBarIcon;
+    wxFrame* m_friendsList;
     RemoteAppCallbackRunner m_callbackRunner;
+    RemotePlayInviteHandler m_inviteHandler;
 };
 
 #endif // !REMOTEAPP_H

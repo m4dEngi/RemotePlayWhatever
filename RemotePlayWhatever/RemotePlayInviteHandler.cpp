@@ -38,23 +38,20 @@ void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
     }
 }
 
+void RemotePlayInviteHandler::SetNonSteamAppID(AppId_t appID)
+{
+    m_nonsteamAppID = appID;
+}
+
 void RemotePlayInviteHandler::OnRemotePlayInviteResult(RemotePlayInviteResult_t* inviteResultCb)
 {
-    if (inviteResultCb->m_eResult != k_ERemoteClientLaunchResultOK)
+    if (inviteResultCb->m_eResult == k_ERemoteClientLaunchResultOK)
     {
-        wxMessageBox(
-            wxString::Format("Could not create remote play session! (Result:%d)", inviteResultCb->m_eResult), 
-            "Remote Play Whatever",
-            wxOK | wxICON_ERROR
-        );
-
-        return;
+        char* buf = new char[1280];
+        sprintf(buf, "Follow this link to join remote game: %s", inviteResultCb->m_szConnectURL);
+        GClientContext()->SteamFriends()->ReplyToFriendMessage(inviteResultCb->m_player.m_playerID, buf);
+        delete[] buf;
     }
-
-    char* buf = new char[1280];
-    sprintf(buf, "Follow this link to join remote game: %s", inviteResultCb->m_szConnectURL);
-    GClientContext()->SteamFriends()->ReplyToFriendMessage(inviteResultCb->m_player.m_playerID, buf);
-    delete[] buf;
 }
 
 void RemotePlayInviteHandler::OnRemotePlayStop(RemoteClientStopStreamSession_t* streamStopCb)

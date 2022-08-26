@@ -11,10 +11,12 @@ public:
 
     ISteamUser019* SteamUser();
     ISteamFriends015* SteamFriends();
+    ISteamUtils009* SteamUtils();
 
     IClientRemoteClientManager* RemoteClientManager();
 
     bool Init();
+    void Shutdown();
     void RunCallbacks();
 
 private:
@@ -24,11 +26,13 @@ private:
     ISteamClient019* m_pSteamClient;
     ISteamUser019* m_pSteamUser;
     ISteamFriends015* m_pSteamFriends;
+    ISteamUtils009* m_pSteamUtils;
 
     IClientEngine* m_pClientEngine;
     IClientRemoteClientManager* m_pClientRemoteManager;
     
     bool m_ShuttingDown;
+    bool m_Initialized;
 };
 
 ClientContext* GClientContext();

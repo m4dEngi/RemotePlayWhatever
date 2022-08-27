@@ -9,6 +9,7 @@ class FriendPanel : public wxPanel
 {
 public:
     FriendPanel(wxWindow* parent, CSteamID friendID);
+    FriendPanel(wxWindow* parent, wxString label);
     ~FriendPanel();
 
     CSteamID GetSteamID();
@@ -24,6 +25,7 @@ protected:
     wxString m_personaName;
 
 private:
+
     void OnMouseEnter(wxMouseEvent& event);
     void OnMouseLeave(wxMouseEvent& event);
     void OnMouseLeftDown(wxMouseEvent& event);

@@ -26,8 +26,7 @@ FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
     wxBoxSizer* friendsListSizer;
     friendsListSizer = new wxBoxSizer( wxVERTICAL );
 
-    FriendPanel* fp = new FriendPanel(friendsListContainer, CSteamID(0, k_EUniversePublic, k_EAccountTypeIndividual));//
-    fp->SetPersonaNameOverride(_("Create guest invite link"));
+    FriendPanel* fp = new FriendPanel(friendsListContainer, "Create guest invite link");
     friendsListSizer->Add(fp, 0, wxALL | wxEXPAND, 0);
     wxStaticLine* fpanelSeparator = new wxStaticLine(friendsListContainer, wxID_ANY, wxDefaultPosition, wxSize(-1,1));
     fpanelSeparator->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_SCROLLBAR));

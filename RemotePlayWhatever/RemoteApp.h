@@ -36,6 +36,7 @@ public:
 
 protected:
     wxFrame* m_friendsList;
+    OneShotInvite* m_oneShot;
     RemoteAppCallbackRunner m_callbackRunner;
     RemotePlayInviteHandler m_inviteHandler;
 };

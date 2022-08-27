@@ -5,14 +5,12 @@
 
 static const wxCmdLineEntryDesc cmdLineDesc[] =
 {
-    { wxCMD_LINE_SWITCH, "v", "verbose", "verbose output" },
     { wxCMD_LINE_SWITCH, "h", "help", "show this help message" },
-    { wxCMD_LINE_OPTION, "a", "appid", "appid for non-steam games", wxCMD_LINE_VAL_NUMBER },
+    { wxCMD_LINE_SWITCH, "v", "verbose", "verbose output" },
+    { wxCMD_LINE_OPTION, "a", "appid", "AppID for non-steam games", wxCMD_LINE_VAL_NUMBER },
     { wxCMD_LINE_OPTION, "i", "invitee", "SteamID64 invitee ( use 0 for guest link )", wxCMD_LINE_VAL_STRING },
     { wxCMD_LINE_NONE }
 };
-
-OneShotInvite* g_oneshot = nullptr;
 
 bool RemoteApp::OnInit()
 {
@@ -21,40 +19,50 @@ bool RemoteApp::OnInit()
 
     if (!GClientContext()->Init())
     {
-        wxMessageBox
-        (
-            "Could not initialize steam client library!",
-            "Error",
-            wxOK | wxICON_ERROR
-        );
+#ifndef _WIN32
+        if(!m_oneShot)
+#endif
+            wxMessageBox
+            (
+                "Could not initialize steam client library!",
+                "Error",
+                wxOK | wxICON_ERROR
+            );
 
-        wxTheApp->Exit();
+        std::cout << "Error: Could not initialize steam client library!" << std::endl;
+
+        return false;
     }
 
     if (!GClientContext()->SteamUser()->BLoggedOn() || !GetRunningGameID().IsValid())
     {
-        wxMessageBox
-        (
-            "Could not detect game running. Start a game first!",
-            "No game runnunig!",
-            wxOK | wxICON_INFORMATION
-        );
+#ifndef _WIN32
+        if(!m_oneShot)
+#endif
+            wxMessageBox
+            (
+                "Could not detect game running. Start a game first!",
+                "No game runnunig!",
+                wxOK | wxICON_INFORMATION
+            );
+
+        std::cout << "Error: No game running!" << std::endl;
 
         GClientContext()->Shutdown();
 
-        wxTheApp->Exit();
+        return false;
     }
 
     m_callbackRunner.Start(200);
 
-    if(!g_oneshot)
+    if(!m_oneShot)
     {
         m_friendsList = new FriendsListFrame(&m_inviteHandler);
         m_friendsList->Show(true);
     }
     else
     {
-        g_oneshot->Send();
+        m_oneShot->Send();
     }
 
     return true;
@@ -62,6 +70,11 @@ bool RemoteApp::OnInit()
 
 int RemoteApp::OnExit()
 {
+    if(m_oneShot)
+    {
+        delete m_oneShot;
+    }
+
     if (m_callbackRunner.IsRunning())
     {
         m_callbackRunner.Stop();
@@ -74,6 +87,13 @@ int RemoteApp::OnExit()
 
 bool RemoteApp::OnCmdLineParsed(wxCmdLineParser &parser)
 {
+    if(parser.FoundSwitch("h"))
+    {
+        parser.Usage();
+
+        wxTheApp->Exit();
+    }
+
     long appID;
     if(parser.Found("a", &appID))
     {
@@ -84,7 +104,7 @@ bool RemoteApp::OnCmdLineParsed(wxCmdLineParser &parser)
     if(parser.Found("i", &inviteeStr64))
     {
         uint64_t cliInvitee = std::strtoull(inviteeStr64.c_str(), NULL, 10);
-        g_oneshot = new OneShotInvite(CSteamID((uint64)cliInvitee), &m_inviteHandler);
+        m_oneShot = new OneShotInvite(CSteamID((uint64)cliInvitee), &m_inviteHandler);
     }
 
     return wxApp::OnCmdLineParsed(parser);

@@ -10,7 +10,10 @@ public:
     virtual ~RemotePlayInviteHandler() {}
 
     void SendInvite(CSteamID invitee);
+    void CancelInvite(CSteamID invitee, uint64 guestID);
+
     void SetNonSteamAppID(AppId_t appID);
+    void SetGuestID(uint64 guestID);
 
 private:
     bool m_enabledDesktopStreaming;

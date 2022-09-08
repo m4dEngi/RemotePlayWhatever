@@ -1,36 +1,28 @@
 #ifndef FRIENDPANEL_H
 #define FRIENDPANEL_H
-#include <wx/wx.h>
+#include "ClickablePanel.h"
 #include "wxSteamStuff.h"
 
-wxDECLARE_EVENT(FP_LEFT_CLICK, wxCommandEvent);
-
-class FriendPanel : public wxPanel
+class FriendPanel : public ClickablePanel
 {
 public:
-    FriendPanel(wxWindow* parent, CSteamID friendID);
-    FriendPanel(wxWindow* parent, wxString label);
+    FriendPanel(wxWindow* parent, wxWindowID winID, CSteamID friendID);
     ~FriendPanel();
 
     CSteamID GetSteamID();
-    wxString GetPersonaName();
 
-    void SetPersonaNameOverride(const wxString& name);
+    wxString GetDisplayPersonaName();
+    wxString GetDisplayPersonaState();
 
-protected:
-    wxStaticBitmap* m_personaImg;
-    wxStaticText* m_personaNameLabel;
-
-    wxSteamID m_steamID;
-    wxString m_personaName;
+    void SetDisplayPersonaName(const wxString& name);
+    void SetDisaplayPersonaState(const wxString& state);
 
 private:
+    wxStaticBitmap* m_personaImg;
+    wxStaticText* m_personaNameLabel;
+    wxStaticText* m_personaStateLabel;
 
-    void OnMouseEnter(wxMouseEvent& event);
-    void OnMouseLeave(wxMouseEvent& event);
-    void OnMouseLeftDown(wxMouseEvent& event);
-    void OnMouseLeftUp(wxMouseEvent& event);
-
+    CSteamID m_steamID;
 };
 
 #endif // FRIENDPANEL_H

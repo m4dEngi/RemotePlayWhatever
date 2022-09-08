@@ -57,20 +57,24 @@ endif()
 include(${wxWidgets_USE_FILE})
 
 set(APPSRCs "RemotePlayWhatever.cpp"
-            "RemotePlayWhatever.h"
             "SteamStuff.h"
             "SteamStuff.cpp"
             "RemoteApp.h"
             "RemoteApp.cpp"
             "RemotePlayInviteHandler.h"
             "RemotePlayInviteHandler.cpp"
+            "QueueInviter.cpp"
+            "QueueInviter.h"
             "FriendsListFrame.h"
             "FriendsListFrame.cpp"
+            "ClickablePanel.h"
+            "ClickablePanel.cpp"
             "FriendPanel.h"
             "FriendPanel.cpp"
             "wxSteamStuff.h"
             "wxSteamStuff.cpp"
 )
+
 
 if(${SYSTEM_OS} STREQUAL "Win")
     add_executable(RemotePlayWhatever WIN32 ${APPSRCs} "appresource.rc")

@@ -1,11 +1,10 @@
 #ifndef REMOTEAPP_H
 #define REMOTEAPP_H
-
+#include <queue>
 #include <wx/wx.h>
-#include <wx/taskbar.h>
-#include <map>
 #include "SteamStuff.h"
 #include "RemotePlayInviteHandler.h"
+#include "QueueInviter.h"
 
 class OneShotInvite
 {
@@ -29,16 +28,27 @@ public:
 class RemoteApp : public wxApp
 {
 public:
-    virtual bool OnInit();
-    virtual int  OnExit();
-    virtual bool OnCmdLineParsed(wxCmdLineParser& parser);
-    virtual void OnInitCmdLine(wxCmdLineParser& parser);
+    RemoteApp();
 
-protected:
+    virtual bool OnInit() override;
+    virtual int  OnRun() override;
+    virtual int  OnExit() override;
+    virtual bool OnCmdLineParsed(wxCmdLineParser& parser) override;
+    virtual void OnInitCmdLine(wxCmdLineParser& parser) override;
+
+private:
+    bool m_oneshot;
+
+
     wxFrame* m_friendsList;
-    OneShotInvite* m_oneShot;
     RemoteAppCallbackRunner m_callbackRunner;
-    RemotePlayInviteHandler m_inviteHandler;
+
+    std::queue<uint64> m_inviteQue;
+    AppId_t m_nonSteamID;
+    uint64 m_guestID;
+    uint64 m_inviteToCancel;
+
+    RemotePlayInviteHandler* m_inviteHandler;
 };
 
 #endif // !REMOTEAPP_H

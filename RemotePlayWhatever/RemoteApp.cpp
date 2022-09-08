@@ -1,16 +1,28 @@
 #include <wx/cmdline.h>
+#include <wx/utils.h>
 #include "RemoteApp.h"
 #include "wxSteamStuff.h"
 #include "FriendsListFrame.h"
 
 static const wxCmdLineEntryDesc cmdLineDesc[] =
 {
-    { wxCMD_LINE_SWITCH, "h", "help", "show this help message" },
+    { wxCMD_LINE_SWITCH, "h", "help",    "show this help message" },
     { wxCMD_LINE_SWITCH, "v", "verbose", "verbose output" },
-    { wxCMD_LINE_OPTION, "a", "appid", "AppID for non-steam games", wxCMD_LINE_VAL_NUMBER },
-    { wxCMD_LINE_OPTION, "i", "invitee", "SteamID64 invitee ( use 0 for guest link )", wxCMD_LINE_VAL_STRING },
+    { wxCMD_LINE_OPTION, "a", "appid",   "AppID for non-steam games", wxCMD_LINE_VAL_NUMBER },
+    { wxCMD_LINE_OPTION, "i", "invite",  "Send remote play invites to provided SteamID64s ( use 0 for guest link )", wxCMD_LINE_VAL_STRING },
+    { wxCMD_LINE_OPTION, "g", "guestid", "Guest client id", wxCMD_LINE_VAL_NUMBER },
+    { wxCMD_LINE_OPTION, "c", "cancel",  "Cancel invite for provided SteamID64 and GuestID", wxCMD_LINE_VAL_STRING },
     { wxCMD_LINE_NONE }
 };
+
+RemoteApp::RemoteApp():
+    m_inviteHandler(nullptr),
+    m_oneshot(false),
+    m_guestID(1),
+    m_nonSteamID(480),
+    m_inviteToCancel(-1)
+{
+}
 
 bool RemoteApp::OnInit()
 {
@@ -20,7 +32,7 @@ bool RemoteApp::OnInit()
     if (!GClientContext()->Init())
     {
 #ifndef _WIN32
-        if(!m_oneShot)
+        if(!m_oneshot)
 #endif
             wxMessageBox
             (
@@ -34,50 +46,56 @@ bool RemoteApp::OnInit()
         return false;
     }
 
-    if (!GClientContext()->SteamUser()->BLoggedOn() || !GetRunningGameID().IsValid())
-    {
-#ifndef _WIN32
-        if(!m_oneShot)
-#endif
-            wxMessageBox
-            (
-                "Could not detect game running. Start a game first!",
-                "No game runnunig!",
-                wxOK | wxICON_INFORMATION
-            );
-
-        std::cout << "Error: No game running!" << std::endl;
-
-        GClientContext()->Shutdown();
-
-        return false;
-    }
-
-    m_callbackRunner.Start(200);
-
-    if(!m_oneShot)
-    {
-        m_friendsList = new FriendsListFrame(&m_inviteHandler);
-        m_friendsList->Show(true);
-    }
-    else
-    {
-        m_oneShot->Send();
-    }
-
     return true;
+}
+
+int RemoteApp::OnRun()
+{
+    m_inviteHandler = new RemotePlayInviteHandler();
+    m_inviteHandler->SetGuestID(m_guestID);
+    m_inviteHandler->SetNonSteamAppID(m_nonSteamID);
+
+    if(!m_oneshot)
+    {
+        m_callbackRunner.Start(200);
+
+        m_friendsList = new FriendsListFrame(m_inviteHandler);
+        m_friendsList->Show(true);
+
+        return wxApp::OnRun();
+    }
+
+    if(!m_inviteQue.empty())
+    {
+        QueueInviter qinviter(m_inviteHandler, &m_inviteQue);
+        qinviter.SendInvites();
+        while(qinviter.Running())
+        {
+            // look at me... i'm the main event loop now
+            GClientContext()->RunCallbacks();
+
+            wxMilliSleep(200);
+        }
+    }
+
+    if(m_inviteToCancel != -1)
+    {
+        m_inviteHandler->CancelInvite(m_inviteToCancel, m_guestID);
+    }
+
+    return 0;
 }
 
 int RemoteApp::OnExit()
 {
-    if(m_oneShot)
-    {
-        delete m_oneShot;
-    }
-
     if (m_callbackRunner.IsRunning())
     {
         m_callbackRunner.Stop();
+    }
+
+    if(m_inviteHandler)
+    {
+        delete m_inviteHandler;
     }
 
     GClientContext()->Shutdown();
@@ -97,14 +115,35 @@ bool RemoteApp::OnCmdLineParsed(wxCmdLineParser &parser)
     long appID;
     if(parser.Found("a", &appID))
     {
-        m_inviteHandler.SetNonSteamAppID(appID);
+        m_nonSteamID = appID;
+    }
+
+    long guestID;
+    if(parser.Found("g", &guestID))
+    {
+        m_guestID = guestID;
     }
 
     wxString inviteeStr64;
     if(parser.Found("i", &inviteeStr64))
     {
-        uint64_t cliInvitee = std::strtoull(inviteeStr64.c_str(), NULL, 10);
-        m_oneShot = new OneShotInvite(CSteamID((uint64)cliInvitee), &m_inviteHandler);
+        m_oneshot = true;
+        size_t first = 0, last = 0;
+        while(last != wxString::npos)
+        {
+            last = inviteeStr64.find(",", first);
+            uint64 invitee = 0;
+            if(inviteeStr64.substr(first, last - first).ToULongLong(&invitee))
+            {
+                m_inviteQue.push(invitee);
+            }
+            first = last + 1;
+        }
+    }
+    else if (parser.Found("c", &inviteeStr64))
+    {
+        m_oneshot = true;
+        inviteeStr64.ToULongLong(&m_inviteToCancel);
     }
 
     return wxApp::OnCmdLineParsed(parser);
@@ -115,35 +154,11 @@ void RemoteApp::OnInitCmdLine(wxCmdLineParser &parser)
     parser.SetDesc(cmdLineDesc);
 }
 
+// --
+
 void RemoteAppCallbackRunner::Notify()
 {
     GClientContext()->RunCallbacks();
-}
-
-// tiny one shot invite handler
-OneShotInvite::OneShotInvite(CSteamID invitee, RemotePlayInviteHandler *handler):
-    m_invitee(invitee),
-    m_handler(handler),
-    m_remoteInviteResultCb(this, &OneShotInvite::OnRemotePlayInviteResult)
-{
-}
-
-void OneShotInvite::OnRemotePlayInviteResult(RemotePlayInviteResult_t* inviteResultCb)
-{
-    if (inviteResultCb->m_eResult == k_ERemoteClientLaunchResultOK)
-    {
-        std::cout << inviteResultCb->m_szConnectURL << std::endl;
-    }
-    else
-    {
-        std::cout << "Could not create remote play session: " << inviteResultCb->m_eResult << std::endl;
-    }
-    wxTheApp->Exit();
-}
-
-void OneShotInvite::Send()
-{
-    m_handler->SendInvite(m_invitee);
 }
 
 

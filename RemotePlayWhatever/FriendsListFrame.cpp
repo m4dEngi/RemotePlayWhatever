@@ -1,7 +1,7 @@
 #include <wx/wx.h>
-#include <wx/statline.h>
 #include <wx/clipbrd.h>
 #include <cstring>
+#include "RemoteApp.h"
 #include "FriendsListFrame.h"
 #include "FriendPanel.h"
 #include "wxSteamStuff.h"
@@ -9,7 +9,8 @@
 
 FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
     wxFrame(NULL, wxID_ANY, _("Remote Play Whatever"), wxPoint(50, 50), wxSize(275, 650)),
-    m_remoteInviteResultCb(this, &FriendsListFrame::OnRemotePlayInviteResult)
+    m_remoteInviteResultCb(this, &FriendsListFrame::OnRemotePlayInviteResult),
+    m_personaStateCb(this, &FriendsListFrame::OnPersonaStateChange)
 {
     SetSizeHints( wxDefaultSize, wxDefaultSize );
 
@@ -18,22 +19,17 @@ FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
 
     m_pRemoteInvite = handler;
 
-    wxBoxSizer* frameSizer;
-    frameSizer = new wxBoxSizer( wxVERTICAL );
+    wxBoxSizer* frameSizer = new wxBoxSizer( wxVERTICAL );
 
-    wxScrolledWindow* friendsListContainer = new wxScrolledWindow( this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL );
-    friendsListContainer->SetScrollRate( 5, 5 );
-    wxBoxSizer* friendsListSizer;
-    friendsListSizer = new wxBoxSizer( wxVERTICAL );
+    m_friendsListContainer = new wxScrolledWindow( this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL );
+    m_friendsListContainer->SetScrollRate( 5, 5 );
+    m_friendsListSizer = new wxBoxSizer( wxVERTICAL );
 
-    FriendPanel* fp = new FriendPanel(friendsListContainer, "Create guest invite link");
-    friendsListSizer->Add(fp, 0, wxALL | wxEXPAND, 0);
-    wxStaticLine* fpanelSeparator = new wxStaticLine(friendsListContainer, wxID_ANY, wxDefaultPosition, wxSize(-1,1));
-    fpanelSeparator->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_SCROLLBAR));
-    friendsListSizer->Add(fpanelSeparator, 0, wxEXPAND | wxALL, 0 );
+    BtnPanel* guestBtn = new BtnPanel(m_friendsListContainer, rpwID_INVITE_GUEST, "Create guest invite link");
+    m_friendsListSizer->Add(guestBtn, 0, wxALL | wxEXPAND, 0);
 
-    wxStaticText* flLabel = new wxStaticText(friendsListContainer, wxID_ANY, "or invite a friend", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER_HORIZONTAL);
-    friendsListSizer->Add(flLabel, 0, wxALL | wxEXPAND, 10);
+    wxStaticText* flLabel = new wxStaticText(m_friendsListContainer, wxID_ANY, "or invite a friend", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER_HORIZONTAL);
+    m_friendsListSizer->Add(flLabel, 0, wxALL | wxEXPAND, 10);
 
     int cFriends = GClientContext()->SteamFriends()->GetFriendCount(k_EFriendFlagImmediate);
     for(int i = 0; i < cFriends; ++i)
@@ -42,23 +38,72 @@ FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
         EPersonaState personaState = GClientContext()->SteamFriends()->GetFriendPersonaState(friendSteamID);
         if(personaState != k_EPersonaStateOffline && personaState != k_EPersonaStateInvisible)
         {
-            FriendPanel* fp = new FriendPanel(friendsListContainer, friendSteamID);
-            friendsListSizer->Add(fp, 0, wxALL | wxEXPAND, 0);
-            wxStaticLine* fpanelSeparator = new wxStaticLine(friendsListContainer, wxID_ANY, wxDefaultPosition, wxSize(-1,1));
-            fpanelSeparator->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_SCROLLBAR));
-            friendsListSizer->Add(fpanelSeparator, 0, wxALL | wxEXPAND, 0);
+            AddFreiendPanel(friendSteamID);
         }
     }
 
-    friendsListContainer->SetSizer( friendsListSizer );
-    friendsListContainer->Layout();
-    friendsListSizer->Fit( friendsListContainer );
-    frameSizer->Add( friendsListContainer, 1, wxEXPAND | wxALL, 0 );
+    m_friendsListContainer->SetSizer( m_friendsListSizer );
+    m_friendsListContainer->Layout();
+    m_friendsListSizer->Fit( m_friendsListContainer );
+    frameSizer->Add( m_friendsListContainer, 1, wxEXPAND | wxALL, 0 );
 
     SetSizer( frameSizer );
     Layout();
 
-    Bind(FP_LEFT_CLICK, &FriendsListFrame::OnFPClick, this);
+    Bind(BTN_PANEL_LEFT_CLICK, &FriendsListFrame::OnFriendPanelClick, this, rpwID_INVITE_FRIEND);
+    Bind(BTN_PANEL_LEFT_CLICK, &FriendsListFrame::OnGuestPanelClick, this, rpwID_INVITE_GUEST);
+}
+
+void FriendsListFrame::AddFreiendPanel(CSteamID friendID)
+{
+    FriendPanel* fp = new FriendPanel(m_friendsListContainer, rpwID_INVITE_FRIEND, friendID);
+    m_friendsListSizer->Add(fp, 0, wxBOTTOM | wxEXPAND, 1);
+
+    uint64 friendID64 = friendID.ConvertToUint64();
+    auto it = m_friendPanels.find(friendID64);
+    if(it != m_friendPanels.end())
+    {
+        m_friendsListContainer->RemoveChild((*it).second);
+        (*it).second->Destroy();
+    }
+    m_friendPanels[friendID.ConvertToUint64()] = fp;
+}
+
+void FriendsListFrame::RemoveFriendPanel(CSteamID friendID)
+{
+    uint64 friendID64 = friendID.ConvertToUint64();
+    auto it = m_friendPanels.find(friendID64);
+    if(it != m_friendPanels.end())
+    {
+        m_friendsListContainer->RemoveChild((*it).second);
+        (*it).second->Destroy();
+        m_friendPanels.erase(it);
+    }
+}
+
+void FriendsListFrame::OnPersonaStateChange(PersonaStateChange_t* personaStateCb)
+{
+    if(personaStateCb->m_ulSteamID == GClientContext()->SteamUser()->GetSteamID())
+    {
+        return;
+    }
+
+    if(!(GClientContext()->SteamFriends()->GetFriendRelationship(personaStateCb->m_ulSteamID) &
+        k_EFriendRelationshipFriend))
+    {
+        return;
+    }
+
+    if(personaStateCb->m_nChangeFlags & k_EPersonaChangeGoneOffline)
+    {
+        RemoveFriendPanel(personaStateCb->m_ulSteamID);
+        Layout();
+    }
+    else if(personaStateCb->m_nChangeFlags & k_EPersonaChangeComeOnline)
+    {
+        AddFreiendPanel(personaStateCb->m_ulSteamID);
+        Layout();
+    }
 }
 
 void FriendsListFrame::OnRemotePlayInviteResult(RemotePlayInviteResult_t* inviteResultCb)
@@ -98,22 +143,48 @@ void FriendsListFrame::OnRemotePlayInviteResult(RemotePlayInviteResult_t* invite
     }
 }
 
-void FriendsListFrame::OnFPClick(wxCommandEvent &event)
+void FriendsListFrame::OnFriendPanelClick(wxCommandEvent &event)
 {
+    if (!GClientContext()->SteamUser()->BLoggedOn() || !GetRunningGameID().IsValid())
+    {
+        wxMessageBox
+        (
+            "Could not detect game running. Start a game first!",
+            "No game runnunig!",
+            wxOK | wxICON_INFORMATION
+        );
+
+        return;
+    }
+
     FriendPanel* sender = (FriendPanel*)event.GetEventObject();
-    CSteamID invitee = ((wxSteamID*)event.GetClientData())->GetSteamID();
-    wxMessageDialog* dlg;
-    if(invitee.IsValid())
-    {
-        dlg = new wxMessageDialog(this, "Send remote play invite to " + sender->GetPersonaName()  + "?", "Confirm Remote Play Invite", wxOK | wxCANCEL);
-    }
-    else
-    {
-        dlg = new wxMessageDialog(this, "Create guest invite link?", "Confirm Remote Play Invite", wxOK | wxCANCEL);
-    }
+    CSteamID invitee = sender->GetSteamID();
+    wxMessageDialog* dlg = new wxMessageDialog(this, "Send remote play invite to " + sender->GetDisplayPersonaName()  + "?", "Confirm Remote Play Invite", wxOK | wxCANCEL);
     if(dlg->ShowModal() == wxID_OK)
     {
         m_pRemoteInvite->SendInvite(invitee);
+    }
+    delete dlg;
+}
+
+void FriendsListFrame::OnGuestPanelClick(wxCommandEvent &event)
+{
+    if (!GClientContext()->SteamUser()->BLoggedOn() || !GetRunningGameID().IsValid())
+    {
+        wxMessageBox
+        (
+            "Could not detect game running. Start a game first!",
+            "No game runnunig!",
+            wxOK | wxICON_INFORMATION
+        );
+
+        return;
+    }
+
+    wxMessageDialog* dlg = new wxMessageDialog(this, "Create guest invite link?", "Confirm Remote Play Invite", wxOK | wxCANCEL);
+    if(dlg->ShowModal() == wxID_OK)
+    {
+        m_pRemoteInvite->SendInvite((uint64)0);
     }
     delete dlg;
 }

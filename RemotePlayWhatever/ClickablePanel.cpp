@@ -92,14 +92,14 @@ BtnPanel::BtnPanel(wxWindow *parent, wxWindowID winID, wxString label):
 {
     SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
 
-    wxBoxSizer* rootSizer = new wxBoxSizer( wxHORIZONTAL );
+    wxBoxSizer* rootSizer = new wxBoxSizer( wxVERTICAL );
 
-    rootSizer->Add( 0, 0, 1, wxEXPAND, 5 );
+    rootSizer->Add( 0, 8, 1, wxEXPAND, 0 );
 
     m_label = new wxStaticText(this, wxID_ANY, label, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER_HORIZONTAL);
     rootSizer->Add(m_label, 0, wxALL | wxEXPAND, 5 );
 
-    rootSizer->Add( 0, 0, 1, wxEXPAND, 5 );
+    rootSizer->Add( 0, 8, 1, wxEXPAND, 0 );
 
     SetSizer( rootSizer );
 

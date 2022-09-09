@@ -65,7 +65,10 @@ int RemoteApp::OnRun()
         return wxApp::OnRun();
     }
 
-    if(!m_inviteQue.empty())
+    if(!m_inviteQue.empty() &&
+        GetRunningGameID().IsValid() &&
+        GClientContext()->SteamUser()->BLoggedOn()
+    )
     {
         QueueInviter qinviter(m_inviteHandler, &m_inviteQue);
         qinviter.SendInvites();

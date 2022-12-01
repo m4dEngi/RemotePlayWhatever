@@ -1,10 +1,8 @@
 #include <wx/wx.h>
 #include <wx/clipbrd.h>
 #include <cstring>
-#include "RemoteApp.h"
 #include "FriendsListFrame.h"
 #include "FriendPanel.h"
-#include "wxSteamStuff.h"
 
 
 FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):

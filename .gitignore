@@ -1,6 +1,7 @@
 .vs/
 out/
 build/
+build_debug/
 CMakeLists.txt.user*
 CMakeCache.txt
 CMakeFiles

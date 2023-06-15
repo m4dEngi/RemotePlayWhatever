@@ -24,7 +24,7 @@ void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
 
     if (gameID.IsSteamApp() && gameID.AppID() != m_nonsteamAppID)
     {
-        GClientContext()->RemoteClientManager()->CreateRemotePlayInviteAndSession(rppInvitee, gameID.AppID());
+        GClientContext()->RemoteClientManager()->BCreateRemotePlayInviteAndSession(rppInvitee, gameID.AppID());
     }
     else
     {
@@ -32,7 +32,7 @@ void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
 
         m_enabledDesktopStreaming = true;
 
-        GClientContext()->RemoteClientManager()->CreateRemotePlayInviteAndSession(rppInvitee, m_nonsteamAppID);
+        GClientContext()->RemoteClientManager()->BCreateRemotePlayInviteAndSession(rppInvitee, m_nonsteamAppID);
     }
 }
 

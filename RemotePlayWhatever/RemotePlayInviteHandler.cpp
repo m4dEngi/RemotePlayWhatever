@@ -57,14 +57,16 @@ void RemotePlayInviteHandler::SetGuestID(uint64 guestID)
 
 void RemotePlayInviteHandler::OnRemotePlayInviteResult(RemotePlayInviteResult_t* inviteResultCb)
 {
-    if (inviteResultCb->m_eResult == k_ERemoteClientLaunchResultOK &&
-        inviteResultCb->m_player.m_playerID.IsValid()
-       )
+    if (inviteResultCb->m_eResult == k_ERemoteClientLaunchResultOK)
     {
-        char* buf = new char[1280];
-        sprintf(buf, "Follow this link to join remote game: %s", inviteResultCb->m_szConnectURL);
-        GClientContext()->SteamFriends()->ReplyToFriendMessage(inviteResultCb->m_player.m_playerID, buf);
-        delete[] buf;
+        if (inviteResultCb->m_player.m_playerID.IsValid())
+        {
+            char* buf = new char[1280];
+            sprintf(buf, "Follow this link to join remote game: %s", inviteResultCb->m_szConnectURL);
+            GClientContext()->SteamFriends()->ReplyToFriendMessage(inviteResultCb->m_player.m_playerID, buf);
+            delete[] buf;
+        }
+        GClientContext()->RemoteClientManager()->ShowRemotePlayTogetherUI(GetRunningGameID().AppID());
     }
 }
 

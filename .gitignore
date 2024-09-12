@@ -1,9 +1,12 @@
 .vs/
+.vscode/
+.cache/
 out/
 build/
 build_debug/
 CMakeLists.txt.user*
 CMakeCache.txt
+CMakeSettings.json
 CMakeFiles
 CMakeScripts
 Testing

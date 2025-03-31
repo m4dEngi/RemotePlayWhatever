@@ -1,5 +1,6 @@
 name: Build RemotePlayWhatever on macOS
 
+# Trigger the workflow on push or pull request to the main branch
 on:
   push:
     branches:
@@ -10,20 +11,24 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-latest  # Use GitHub's macOS runner
 
     steps:
+    # Checkout the repository
     - name: Checkout code
       uses: actions/checkout@v2
 
+    # Set up Homebrew to install dependencies (since it's the default package manager on macOS)
     - name: Set up Homebrew
       run: |
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
+    # Install dependencies (like cmake, libusb, ffmpeg, etc.)
     - name: Install dependencies
       run: |
         brew install cmake libusb ffmpeg
 
+    # Build the project
     - name: Build the project
       run: |
         mkdir -p build

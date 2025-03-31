@@ -1,0 +1,32 @@
+name: Build RemotePlayWhatever on macOS
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Homebrew
+      run: |
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+    - name: Install dependencies
+      run: |
+        brew install cmake libusb ffmpeg
+
+    - name: Build the project
+      run: |
+        mkdir -p build
+        cd build
+        cmake ..
+        make

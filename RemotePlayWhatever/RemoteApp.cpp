@@ -19,7 +19,7 @@ RemoteApp::RemoteApp():
     m_inviteHandler(nullptr),
     m_oneshot(false),
     m_guestID(1),
-    m_nonSteamID(480),
+    m_nonSteamID(0),
     m_inviteToCancel(-1)
 {
 }

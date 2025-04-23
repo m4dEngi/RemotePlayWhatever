@@ -1,6 +1,10 @@
 # RemotePlayWhatever
 Tiny application that lets you force remote play together any game you have in your steam library including non-steam ones.
 
+<p align="center">
+    <img src="assets/rpw_screen.png" alt="RemotePlayWhatever screenshot">
+</p>
+
 ## How it works
 RemotePlayWhatever communicates with your running Steam client and instructs it to initiate a Remote Play Together session for the currently running game launched through Steam. It does this by using undocumented and potentially **unstable** internal Steam client APIs.
 

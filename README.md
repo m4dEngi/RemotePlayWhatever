@@ -61,7 +61,7 @@ Download the latest RemotePlayWhatever [Release](https://github.com/m4dEngi/Remo
     cmake -B build -DCMAKE_BUILD_TYPE=Release
     cmake --build build
     ```
-    The executable will be placed in `build/RemotePlayWhatever` directory.
+    The executable will be placed in the `build/RemotePlayWhatever` directory.
 4. **( optional )** Create and install deb package:
     ```bash
     cmake --build build --target package
@@ -70,21 +70,21 @@ Download the latest RemotePlayWhatever [Release](https://github.com/m4dEngi/Remo
 
 ### Windows
 These instructions assume a 32-bit build using Visual Studio. \
-All commands should be executed in a `Developer Command Prompt for VS`
+All commands should be executed in a `Developer Command Prompt for VS`.
 
-1. Download and install [Visual Studio](https://visualstudio.microsoft.com/) (Community Edition is free) with the "Desktop development with C++" workload installed and a "Git For Windows" component.
-2. Download and install [wxWidgets](https://wxwidgets.org/) ( follow the docs )
+1. Download and install [Visual Studio](https://visualstudio.microsoft.com/) (Community Edition is free) with the "Desktop development with C++" workload installed and "Git For Windows" and "MSVC v142 - VS 2019 C++ x64/x86 build tools" components.
+2. Download and install [wxWidgets](https://wxwidgets.org/) ( follow the docs ).
 3. Clone the repository:
     ```bash
-    git clone --recurse-submodules https://github.com/m4dEngi/RemotePlayWhatever.git
+    git clone --recurse-submodules https://github.com/m4dEngi/RemotePlayWhatever.git && 
     cd RemotePlayWhatever
     ```
 4. Configure and build:
     ```bash
-    cmake -B build -A Win32
+    cmake -B build -A Win32 && 
     cmake --build build --config Release
     ```
-    If build is successful, the executable will be created in `build\RemotePlayWhatever\Release` folder.
+    If build is successful, the executable will be created in the `build\RemotePlayWhatever\Release` folder.
 
 ## Contributing
 Contributions are welcome! If you find a bug or have a feature request, please open an issue.

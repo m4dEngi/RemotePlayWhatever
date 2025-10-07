@@ -49,6 +49,8 @@ else()
     )
 endif()
 
+
+
 find_package(wxWidgets COMPONENTS core base adv)
 if(NOT wxWidgets_FOUND)
     message(FATAL_ERROR "wxWidgets not found!")

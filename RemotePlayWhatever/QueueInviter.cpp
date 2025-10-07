@@ -39,7 +39,7 @@ void QueueInviter::OnRemotePlayInviteResult(RemotePlayInviteResult_t* inviteResu
 
     if(inviteResultCb->m_eResult == k_ERemoteClientLaunchResultOK)
     {
-        std::cout << " - guestid    : " << inviteResultCb->m_player.m_guestID <<std::endl;
+        std::cout << " - guestid    : " << inviteResultCb->m_player.m_unGuestID <<std::endl;
         std::cout << " - connectURL : " << inviteResultCb->m_szConnectURL <<std::endl;
         std::cout << std::endl;
     }

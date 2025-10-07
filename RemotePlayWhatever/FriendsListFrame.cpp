@@ -141,17 +141,56 @@ void FriendsListFrame::OnRemotePlayInviteResult(RemotePlayInviteResult_t* invite
     }
 }
 
-void FriendsListFrame::OnFriendPanelClick(wxCommandEvent &event)
+bool FriendsListFrame::CanSendInvite()
 {
     if (!GClientContext()->SteamUser()->BLoggedOn() || !GetRunningGameID().IsValid())
     {
-        wxMessageBox
-        (
+        wxMessageBox(
             "Could not detect game running. Start a game first!",
             "No game runnunig!",
             wxOK | wxICON_INFORMATION
         );
+        return false;
+    }
+    return true;
+}
 
+bool FriendsListFrame::ShowNonSteamWarning()
+{
+    AppId_t nonSteamAppID = m_pRemoteInvite->GetNonSteamAppID();
+    CGameID gameRunning = GetRunningGameID();
+
+    if (gameRunning.IsSteamApp() && gameRunning.AppID() != nonSteamAppID)
+    {
+        return true;
+    }
+
+    bool dlgResult = false;
+    wxMessageDialog* dlg = new wxMessageDialog(this,
+                                               "Starting a Remote Play Together session for a non-Steam game\n"
+                                               "will expose your entire desktop to the remote player.\n"
+                                               "The Steam client might need to be restarted to stop\n"
+                                               "the desktop sharing session!\n\n"
+                                               "Continue?",
+                                               "Non-Steam Game confirmation",
+                                               wxOK | wxCANCEL);
+    if(dlg->ShowModal() == wxID_OK)
+    {
+        dlgResult = true;
+    }
+    delete dlg;
+    return dlgResult;
+}
+
+void FriendsListFrame::OnFriendPanelClick(wxCommandEvent &event)
+{
+    if(!CanSendInvite())
+    {
+        return;
+    }
+
+    if(!ShowNonSteamWarning())
+    {
         return;
     }
 
@@ -167,15 +206,13 @@ void FriendsListFrame::OnFriendPanelClick(wxCommandEvent &event)
 
 void FriendsListFrame::OnGuestPanelClick(wxCommandEvent &event)
 {
-    if (!GClientContext()->SteamUser()->BLoggedOn() || !GetRunningGameID().IsValid())
+    if(!CanSendInvite())
     {
-        wxMessageBox
-        (
-            "Could not detect game running. Start a game first!",
-            "No game runnunig!",
-            wxOK | wxICON_INFORMATION
-        );
+        return;
+    }
 
+    if(!ShowNonSteamWarning())
+    {
         return;
     }
 

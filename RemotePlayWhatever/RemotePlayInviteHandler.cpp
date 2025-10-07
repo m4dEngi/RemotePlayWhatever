@@ -5,9 +5,15 @@ RemotePlayInviteHandler::RemotePlayInviteHandler() :
     m_enabledDesktopStreaming(false),
     m_remoteGuestID(1),
     m_nonsteamAppID(0),
+    m_groupID(1),
     m_remoteInviteResultCb(this, &RemotePlayInviteHandler::OnRemotePlayInviteResult),
     m_remoteStopCb(this, &RemotePlayInviteHandler::OnRemotePlayStop)
 {
+}
+
+AppId_t RemotePlayInviteHandler::GetNonSteamAppID()
+{
+    return m_nonsteamAppID;
 }
 
 void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
@@ -19,7 +25,7 @@ void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
         return;
     }
 
-    RemotePlayPlayer_t rppInvitee = { invitee, m_remoteGuestID, 0, 0, 0 };
+    RemotePlayPlayer_t rppInvitee = { invitee, m_remoteGuestID, m_groupID, 0, 0, 0 };
     ++m_remoteGuestID;
 
     if (gameID.IsSteamApp() && gameID.AppID() != m_nonsteamAppID)
@@ -36,11 +42,11 @@ void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
     }
 }
 
-void RemotePlayInviteHandler::CancelInvite(CSteamID invitee, uint64 guestID)
+void RemotePlayInviteHandler::CancelInvite(CSteamID invitee, uint32 guestID)
 {
     if(GClientContext()->RemoteClientManager()->BIsStreamingSessionActive())
     {
-        RemotePlayPlayer_t rppInvitee = { invitee, guestID, 0, 0, 0 };
+        RemotePlayPlayer_t rppInvitee = { invitee, guestID, m_groupID, 0, 0, 0 };
         GClientContext()->RemoteClientManager()->CancelRemotePlayInviteAndSession(rppInvitee);
     }
 }
@@ -50,7 +56,7 @@ void RemotePlayInviteHandler::SetNonSteamAppID(AppId_t appID)
     m_nonsteamAppID = appID;
 }
 
-void RemotePlayInviteHandler::SetGuestID(uint64 guestID)
+void RemotePlayInviteHandler::SetGuestID(uint32 guestID)
 {
     m_remoteGuestID = guestID;
 }
@@ -72,9 +78,7 @@ void RemotePlayInviteHandler::OnRemotePlayInviteResult(RemotePlayInviteResult_t*
 
 void RemotePlayInviteHandler::OnRemotePlayStop(RemoteClientStopStreamSession_t* streamStopCb)
 {
-    if (!GClientContext()->RemoteClientManager()->BIsStreamingSessionActive() &&
-        m_enabledDesktopStreaming
-       )
+    if (streamStopCb->m_player.m_playerID == GClientContext()->SteamUser()->GetSteamID())
     {
         GClientContext()->RemoteClientManager()->SetStreamingDesktopToRemotePlayTogetherEnabled(false);
         m_remoteGuestID = 1;

@@ -10,14 +10,17 @@ public:
     virtual ~RemotePlayInviteHandler() {}
 
     void SendInvite(CSteamID invitee);
-    void CancelInvite(CSteamID invitee, uint64 guestID);
+    void CancelInvite(CSteamID invitee, uint32 guestID);
 
     void SetNonSteamAppID(AppId_t appID);
-    void SetGuestID(uint64 guestID);
+    void SetGuestID(uint32 guestID);
+
+    AppId_t GetNonSteamAppID();
 
 private:
     bool m_enabledDesktopStreaming;
-    uint64 m_remoteGuestID;
+    uint32 m_remoteGuestID;
+    uint32 m_groupID;
     AppId_t m_nonsteamAppID;
 
     STEAM_CALLBACK(RemotePlayInviteHandler, OnRemotePlayStop, RemoteClientStopStreamSession_t, m_remoteStopCb);

@@ -20,6 +20,9 @@ private:
     void AddFreiendPanel(CSteamID friendID);
     void RemoveFriendPanel(CSteamID friendID);
 
+    bool ShowNonSteamWarning();
+    bool CanSendInvite();
+
     RemotePlayInviteHandler* m_pRemoteInvite;
     wxScrolledWindow* m_friendsListContainer;
     wxBoxSizer* m_friendsListSizer;

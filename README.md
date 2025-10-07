@@ -81,7 +81,7 @@ All commands should be executed in a `Developer Command Prompt for VS`.
     ```
 4. Configure and build:
     ```bash
-    cmake -B build -A Win32 && 
+    cmake -B build -A Win32
     cmake --build build --config Release
     ```
     If build is successful, the executable will be created in the `build\RemotePlayWhatever\Release` folder.

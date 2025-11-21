@@ -219,7 +219,7 @@ void FriendsListFrame::OnGuestPanelClick(wxCommandEvent &event)
     wxMessageDialog* dlg = new wxMessageDialog(this, "Create guest invite link?", "Confirm Remote Play Invite", wxOK | wxCANCEL);
     if(dlg->ShowModal() == wxID_OK)
     {
-        m_pRemoteInvite->SendInvite((uint64)0);
+        m_pRemoteInvite->SendInvite(CSteamID(0, k_EUniversePublic, k_EAccountTypeIndividual));
     }
     delete dlg;
 }

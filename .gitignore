@@ -1,6 +1,9 @@
 .vs/
 .vscode/
 .cache/
+.cmake/
+.clangd/
+.qtcreator/
 out/
 build/
 build_debug/

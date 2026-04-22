@@ -1,13 +1,14 @@
+>[!CAUTION]
+> This application does not function as intended due to breaking changes in the latest Steam Client releases! ( see: https://github.com/m4dEngi/RemotePlayWhatever/issues/285 https://github.com/m4dEngi/RemotePlayWhatever/issues/279 )
+> Consider using an [alternative](#alternatives)!
+
+
 # RemotePlayWhatever
 Tiny application that lets you force remote play together any game you have in your steam library including non-steam ones.
 
 <p align="center">
     <img src="assets/rpw_screen.png" alt="RemotePlayWhatever screenshot">
 </p>
-
->[!CAUTION]
-> This application does not function as intended due to breaking changes in the latest Steam Client releases! ( see: https://github.com/m4dEngi/RemotePlayWhatever/issues/285 https://github.com/m4dEngi/RemotePlayWhatever/issues/279 )
-> Consider using an [alternative](#alternatives)!
 
 ## How it works
 RemotePlayWhatever communicates with your running Steam client and instructs it to initiate a Remote Play Together session for the currently running game launched through Steam. It does this by using undocumented and potentially **unstable** internal Steam client APIs.

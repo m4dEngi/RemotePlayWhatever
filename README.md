@@ -5,13 +5,17 @@ Tiny application that lets you force remote play together any game you have in y
     <img src="assets/rpw_screen.png" alt="RemotePlayWhatever screenshot">
 </p>
 
+>[!CAUTION]
+> This application does not function as intended due to breaking changes in the latest Steam Client releases! ( see: https://github.com/m4dEngi/RemotePlayWhatever/issues/285 https://github.com/m4dEngi/RemotePlayWhatever/issues/279 )
+> Consider using an [alternative](#alternatives)!
+
 ## How it works
 RemotePlayWhatever communicates with your running Steam client and instructs it to initiate a Remote Play Together session for the currently running game launched through Steam. It does this by using undocumented and potentially **unstable** internal Steam client APIs.
 
-## ⚠️ Warning
-- This tool relies on internal Steam client APIs. Future Steam client updates **may break compatibility** without warning.
-- This project aims to support the latest **stable** version of the Steam client. If you encounter issues after a Steam update, please check for a new version of RemotePlayWhatever or report an issue.
-- **Use at Your Own Risk:** This tool communicates locally with Steam via its standard IPC channel and doesn't modify files. However, it relies on unstable, internal APIs used by the Steam client itself, not the stable APIs meant for games. These internal APIs can change with Steam updates, potentially breaking this tool without warning.
+>[!WARNING]
+> - This tool relies on internal Steam client APIs. Future Steam client updates **may break compatibility** without warning.
+> - This project aims to support the latest **stable** version of the Steam client. If you encounter issues after a Steam update, please check for a new version of RemotePlayWhatever or report an issue.
+> - **Use at Your Own Risk:** This tool communicates locally with Steam via its standard IPC channel and doesn't modify files. However, it relies on unstable, internal APIs used by the Steam client itself, not the stable APIs meant for games. These internal APIs can change with Steam updates, potentially breaking this tool without warning.
 
 ## Getting Started
 Download the latest RemotePlayWhatever [Release](https://github.com/m4dEngi/RemotePlayWhatever/releases/latest) for your system:
@@ -91,3 +95,12 @@ Contributions are welcome! If you find a bug or have a feature request, please o
 
 ## Acknowledgements
 - Original idea and initial testing by @Jondycz
+
+## Alternatives
+Steam
+- [RemotePlayDetached](https://github.com/smaTc/RemotePlayDetached)
+- [cooplauncher](https://github.com/MBaliver/cooplauncher)
+
+Standalone
+- [Parsec](https://parsec.app/)
+

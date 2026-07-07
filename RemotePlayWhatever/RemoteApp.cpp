@@ -81,6 +81,7 @@ int RemoteApp::OnRun()
         {
             // look at me... i'm the main event loop now
             GClientContext()->RunCallbacks();
+            m_inviteHandler->GroupTick();   // fire the async (group-gated) invite
 
             wxMilliSleep(200);
         }
@@ -168,15 +169,18 @@ void RemoteAppCallbackRunner::Notify()
 {
     GClientContext()->RunCallbacks();
 
-    // Re-assert guest control roughly every 2s (10 ticks @ 200ms) so Steam
-    // can't silently reset the per-user input we granted.
-    static int s_tick = 0;
-    if (++s_tick >= 10)
+    RemoteApp* app = static_cast<RemoteApp*>(wxTheApp);
+    if (app && app->GetInviteHandler())
     {
-        s_tick = 0;
-        RemoteApp* app = static_cast<RemoteApp*>(wxTheApp);
-        if (app && app->GetInviteHandler())
+        // Advance async group creation / flush queued invites every tick.
+        app->GetInviteHandler()->GroupTick();
+
+        // Re-assert guest control roughly every 2s (10 ticks @ 200ms) so Steam
+        // can't silently reset the per-user input we granted.
+        static int s_tick = 0;
+        if (++s_tick >= 10)
         {
+            s_tick = 0;
             app->GetInviteHandler()->GrantControlTick();
         }
     }

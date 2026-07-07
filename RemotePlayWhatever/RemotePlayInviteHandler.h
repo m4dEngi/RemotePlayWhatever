@@ -30,6 +30,11 @@ public:
 
     AppId_t GetNonSteamAppID();
 
+    // Called every app-timer tick (~200ms). Advances async group creation and
+    // fires any queued invites once the group is ready (so SendInvite never
+    // blocks the UI). Cheap no-op when there's nothing pending.
+    void GroupTick();
+
     // Called periodically (from the app callback timer) to re-assert each
     // guest's desired input state so Steam can't silently reset it.
     void GrantControlTick();
@@ -43,14 +48,21 @@ public:
 
 private:
     void ApplyGuest(const ConnectedGuest& g);
-    // Create/host a real Remote Play Together group and return its id (the
-    // missing piece: stock RPW hardcodes groupID=1 without ever creating one).
-    uint32 EnsureGroup(AppId_t appID);
+
+    // Async group creation. Stock RPW hardcodes groupID=1 without ever creating
+    // a group; we create/settle one first, then fire the queued invite(s).
+    enum EGroupState { GroupNone, GroupWaiting, GroupReady };
+    struct PendingInvite { CSteamID invitee; AppId_t appID; };
 
     bool m_enabledDesktopStreaming;
     uint32 m_remoteGuestID;
     uint32 m_groupID;
     AppId_t m_nonsteamAppID;
+
+    EGroupState m_groupState;
+    int m_groupTicks;
+    bool m_calledCreate;
+    std::vector<PendingInvite> m_pending;
 
     std::vector<ConnectedGuest> m_guests;
     uint32 m_rosterRevision;

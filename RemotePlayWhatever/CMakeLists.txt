@@ -59,6 +59,7 @@ endif()
 include(${wxWidgets_USE_FILE})
 
 set(APPSRCs "RemotePlayWhatever.cpp"
+            "ClientVTableByName.h"
             "SteamStuff.h"
             "SteamStuff.cpp"
             "RemoteApp.h"

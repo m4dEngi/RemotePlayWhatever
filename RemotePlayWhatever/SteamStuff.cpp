@@ -10,7 +10,6 @@ ClientContext::ClientContext():
     m_pSteamFriends(nullptr),
     m_pSteamClient(nullptr),
     m_pClientEngine(nullptr),
-    m_pClientRemoteManager(nullptr),
     m_ShuttingDown(false)
 {
 }
@@ -73,8 +72,22 @@ bool ClientContext::Init()
         return false;
     }
 
-    m_pClientRemoteManager = (IClientRemoteClientManager*)m_pClientEngine->GetIClientRemoteClientManager(m_hPipe);
-    if (!m_pClientRemoteManager)
+    IClientRemoteClientManager* pRemoteManager =
+        (IClientRemoteClientManager*)m_pClientEngine->GetIClientRemoteClientManager(m_hPipe);
+    if (!pRemoteManager)
+    {
+        return false;
+    }
+
+    // IClientRemoteClientManager is the interface that actually drifts between
+    // builds (Valve keeps adding Remote Play methods), so instead of calling it
+    // through the header's fixed vtable order we resolve each method by name and
+    // call through the resolved index. Confirm the methods we use exist on this
+    // build before anything calls through the proxy.
+    m_remoteManager.Bind(pRemoteManager);
+    if (!m_remoteManager.Ok()
+        || !m_remoteManager.Has("BCreateRemotePlayInviteAndSession")
+        || !m_remoteManager.Has("ShowRemotePlayTogetherUI"))
     {
         return false;
     }
@@ -127,9 +140,9 @@ void ClientContext::RunCallbacks()
     }
 }
 
-IClientRemoteClientManager* ClientContext::RemoteClientManager()
+CRemoteClientManagerByName* ClientContext::RemoteClientManager()
 {
-    return m_pClientRemoteManager;
+    return &m_remoteManager;
 }
 
 // helper functions

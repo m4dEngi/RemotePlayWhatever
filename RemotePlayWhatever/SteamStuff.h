@@ -42,6 +42,40 @@ public:
     {
         Invoke<void>("ShowRemotePlayTogetherUI", appID);
     }
+    // --- Remote Play Together group + per-user input control ---------------
+    // On drifted builds the guest never appears in the Steam overlay player
+    // list, so granting control through the overlay is impossible; the only
+    // way to give a guest input is to enable it per-user programmatically.
+    uint32 GetLocalRemotePlayTogetherGroupID()
+    {
+        return Invoke<uint32>("GetLocalRemotePlayTogetherGroupID", (int32)0);
+    }
+    bool BCreateRemotePlayGroup()
+    {
+        return Invoke<bool>("BCreateRemotePlayGroup", (void*)0);
+    }
+    uint32 GetAvailableRemotePlayTogetherGuestID(uint32 group)
+    {
+        return Invoke<uint32>("GetAvailableRemotePlayTogetherGuestID", group);
+    }
+    // These take the 40-byte RemotePlayPlayer_t by value (passed by hidden
+    // pointer per the x64 ABI) — NOT (group,guest) ints, which crashes.
+    void SetPerUserKeyboardInputEnabled(RemotePlayPlayer_t player, bool enabled)
+    {
+        Invoke<void>("SetPerUserKeyboardInputEnabled", player, enabled);
+    }
+    void SetPerUserMouseInputEnabled(RemotePlayPlayer_t player, bool enabled)
+    {
+        Invoke<void>("SetPerUserMouseInputEnabled", player, enabled);
+    }
+    void SetPerUserControllerInputEnabled(RemotePlayPlayer_t player, bool enabled)
+    {
+        Invoke<void>("SetPerUserControllerInputEnabled", player, enabled);
+    }
+    void DisbandRemotePlayTogetherGroup(uint32 group)
+    {
+        Invoke<void>("DisbandRemotePlayTogetherGroup", group);
+    }
 };
 
 class ClientContext

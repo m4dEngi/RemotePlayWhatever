@@ -22,16 +22,26 @@
 //  Cross-platform: the scan is pure x86-64 machine-code pattern matching and
 //  the string is present in both steamclient64.dll (Windows / PE) and
 //  steamclient.so (Linux / ELF, incl. Steam Deck), so the same code path works
-//  on every target this project builds for. Module bounds are found with the
-//  OS loader (PE headers via VirtualQuery on Windows; dladdr + dl_iterate_phdr
-//  on Linux). Only x86-64 is handled; that is the only arch the Steam client
-//  ships as.
+//  on every target this project builds for. Only x86-64 is handled; that is the
+//  only arch the Steam client ships as.
+//
+//  Memory safety: a Windows module is one contiguous committed image, but an
+//  ELF object is several PT_LOAD segments (text / rodata / data) with UNMAPPED
+//  gaps between them. So we never scan against one big [base, base+size) span;
+//  instead we collect the individual mapped segments and confine every read to
+//  the segment that owns the address. Reading across a gap would SIGSEGV (and
+//  on Linux that takes the whole Steam session down) — this is why an earlier
+//  single-span version crashed on Linux while working on Windows.
 // ============================================================================
 
 #include <cstdint>
 #include <cstring>
 #include <cctype>
+#include <cstdio>
+#include <cstdlib>
+#include <cstdarg>
 #include <string>
+#include <vector>
 #include <unordered_map>
 
 #if defined(_WIN32)
@@ -43,9 +53,54 @@
 
 namespace clientvt
 {
-    // --- locate the [lo, hi) address range of the module that owns `addr` ----
+    // Opt-in diagnostics: set env RPW_VTDEBUG=1 to log the resolver's view of
+    // the module (segments, scan progress, resolved names/indices) to stderr.
+    // Off by default and effectively zero cost.
+    inline bool DebugEnabled()
+    {
+        static int on = -1;
+        if (on < 0)
+            on = (std::getenv("RPW_VTDEBUG") != NULL) ? 1 : 0;
+        return on != 0;
+    }
+
+    inline void Log(const char* fmt, ...)
+    {
+        if (!DebugEnabled())
+            return;
+        va_list ap;
+        va_start(ap, fmt);
+        std::vfprintf(stderr, fmt, ap);
+        va_end(ap);
+        std::fflush(stderr);
+    }
+
+    // A single mapped, readable address range within a module.
+    struct Segment { uintptr_t lo; uintptr_t hi; };
+
+    // Is [a, a+n) fully inside one mapped segment?  Reads must pass this so we
+    // never touch an unmapped inter-segment gap.
+    inline bool Readable(const std::vector<Segment>& segs, uintptr_t a, size_t n)
+    {
+        for (size_t i = 0; i < segs.size(); ++i)
+            if (a >= segs[i].lo && a + n <= segs[i].hi)
+                return true;
+        return false;
+    }
+
+    // Upper bound of the segment that owns `a` (so a forward scan starting at a
+    // known-good address can't walk past that segment into a gap). 0 if none.
+    inline uintptr_t SegmentEndOf(const std::vector<Segment>& segs, uintptr_t a)
+    {
+        for (size_t i = 0; i < segs.size(); ++i)
+            if (a >= segs[i].lo && a < segs[i].hi)
+                return segs[i].hi;
+        return 0;
+    }
+
+    // --- collect the mapped segments of the module that owns `addr` -----------
 #if defined(_WIN32)
-    inline bool ModuleRangeOf(const void* addr, uintptr_t& lo, uintptr_t& hi)
+    inline bool ModuleSegments(const void* addr, std::vector<Segment>& segs)
     {
         MEMORY_BASIC_INFORMATION mbi;
         if (!VirtualQuery(addr, &mbi, sizeof(mbi)))
@@ -64,59 +119,79 @@ namespace clientvt
         if (nt->Signature != IMAGE_NT_SIGNATURE)
             return false;
 
-        lo = base;
-        hi = base + nt->OptionalHeader.SizeOfImage;
+        // A PE image is mapped as one contiguous committed region, so a single
+        // [base, base+SizeOfImage) segment is both correct and safe to read.
+        Segment s;
+        s.lo = base;
+        s.hi = base + nt->OptionalHeader.SizeOfImage;
+        segs.push_back(s);
+        Log("[vt] module base=%p size=0x%zx (1 contiguous PE image)\n",
+            reinterpret_cast<void*>(base),
+            static_cast<size_t>(nt->OptionalHeader.SizeOfImage));
         return true;
     }
 #else
-    struct PhdrQuery { uintptr_t base; uintptr_t span; };
+    struct SegQuery { uintptr_t base; std::vector<Segment>* segs; };
 
-    inline int PhdrCb(struct dl_phdr_info* info, size_t, void* data)
+    inline int SegCb(struct dl_phdr_info* info, size_t, void* data)
     {
-        PhdrQuery* q = static_cast<PhdrQuery*>(data);
+        SegQuery* q = static_cast<SegQuery*>(data);
         if (static_cast<uintptr_t>(info->dlpi_addr) != q->base)
             return 0; // not the object we want; keep iterating
 
-        uintptr_t maxEnd = 0;
         for (int i = 0; i < info->dlpi_phnum; ++i)
         {
             const ElfW(Phdr)& ph = info->dlpi_phdr[i];
-            if (ph.p_type == PT_LOAD)
-            {
-                uintptr_t end = static_cast<uintptr_t>(ph.p_vaddr + ph.p_memsz);
-                if (end > maxEnd)
-                    maxEnd = end;
-            }
+            if (ph.p_type != PT_LOAD)
+                continue;
+            Segment s;
+            s.lo = q->base + ph.p_vaddr;
+            s.hi = s.lo + ph.p_memsz; // p_memsz covers bss too (mapped anon)
+            q->segs->push_back(s);
         }
-        q->span = maxEnd;
         return 1; // found it; stop
     }
 
-    inline bool ModuleRangeOf(const void* addr, uintptr_t& lo, uintptr_t& hi)
+    inline bool ModuleSegments(const void* addr, std::vector<Segment>& segs)
     {
         Dl_info di;
         std::memset(&di, 0, sizeof(di));
         if (!dladdr(const_cast<void*>(addr), &di) || !di.dli_fbase)
             return false;
 
-        lo = reinterpret_cast<uintptr_t>(di.dli_fbase);
-        PhdrQuery q = { lo, 0 };
-        dl_iterate_phdr(PhdrCb, &q);
-        if (q.span == 0)
-            return false;
+        SegQuery q;
+        q.base = reinterpret_cast<uintptr_t>(di.dli_fbase);
+        q.segs = &segs;
+        dl_iterate_phdr(SegCb, &q);
 
-        hi = lo + q.span;
-        return true;
+        if (DebugEnabled())
+        {
+            Log("[vt] module %s base=%p : %zu PT_LOAD segment(s)\n",
+                di.dli_fname ? di.dli_fname : "?",
+                di.dli_fbase, segs.size());
+            for (size_t i = 0; i < segs.size(); ++i)
+                Log("[vt]   seg[%zu] %p .. %p\n", i,
+                    reinterpret_cast<void*>(segs[i].lo),
+                    reinterpret_cast<void*>(segs[i].hi));
+        }
+        return !segs.empty();
     }
 #endif
 
     // --- read the bare method name a stub references via `lea reg,[rip+d32]` --
-    inline std::string NameOf(uintptr_t fn, uintptr_t lo, uintptr_t hi)
+    inline std::string NameOf(uintptr_t fn, const std::vector<Segment>& segs)
     {
         const uint8_t* p = reinterpret_cast<const uint8_t*>(fn);
+
+        // Confine the instruction scan to the code segment that owns `fn`, so we
+        // can't walk off the end of .text into an unmapped gap.
+        uintptr_t codeHi = SegmentEndOf(segs, fn);
+        if (!codeHi)
+            return std::string();
+
         for (int k = 0; k < 220; ++k)
         {
-            if (fn + k + 7 >= hi) // don't read past the module
+            if (fn + k + 7 > codeHi) // instruction bytes must stay in this segment
                 break;
 
             uint8_t rex = p[k];
@@ -130,13 +205,17 @@ namespace clientvt
             int32_t disp;
             std::memcpy(&disp, p + k + 3, sizeof(disp));
             uintptr_t target = fn + k + 7 + static_cast<int64_t>(disp);
-            if (target < lo || target >= hi)
+
+            // The string may live in a different segment (rodata); cap the read
+            // to whatever segment owns `target` so we never cross a gap.
+            uintptr_t strHi = SegmentEndOf(segs, target);
+            if (!strHi)
                 continue;
 
             const char* s = reinterpret_cast<const char*>(target);
             std::string out;
             bool bad = false;
-            for (int j = 0; j < 96; ++j)
+            for (int j = 0; j < 96 && target + j < strHi; ++j)
             {
                 char c = s[j];
                 if (c == 0)
@@ -180,19 +259,34 @@ namespace clientvt
             return map;
 
         void** vt = *reinterpret_cast<void***>(iface);
-        uintptr_t lo = 0, hi = 0;
-        if (!ModuleRangeOf(reinterpret_cast<void*>(vt[0]), lo, hi))
+
+        std::vector<Segment> segs;
+        if (!ModuleSegments(reinterpret_cast<void*>(vt[0]), segs))
+        {
+            Log("[vt] ModuleSegments failed for vt[0]=%p\n",
+                reinterpret_cast<void*>(vt[0]));
             return map;
+        }
+
+        // The vtable array itself lives in a segment; don't read entries past
+        // the end of that segment (another potential cross-gap read on Linux).
+        uintptr_t vtHi = SegmentEndOf(segs, reinterpret_cast<uintptr_t>(vt));
 
         for (int i = 0; i < 400; ++i)
         {
-            uintptr_t fn = reinterpret_cast<uintptr_t>(vt[i]);
-            if (fn < lo || fn >= hi) // ran off the end of the vtable
+            uintptr_t slot = reinterpret_cast<uintptr_t>(&vt[i]);
+            if (vtHi && slot + sizeof(void*) > vtHi) // ran off the vtable's segment
                 break;
-            std::string name = NameOf(fn, lo, hi);
+
+            uintptr_t fn = reinterpret_cast<uintptr_t>(vt[i]);
+            if (!SegmentEndOf(segs, fn)) // slot doesn't point into the module -> end of vtable
+                break;
+
+            std::string name = NameOf(fn, segs);
             if (!name.empty() && map.find(name) == map.end())
                 map[name] = i;
         }
+        Log("[vt] resolved %zu named method(s)\n", map.size());
         return map;
     }
 
@@ -219,6 +313,18 @@ namespace clientvt
         bool Ok() const { return m_iface != NULL && !m_names.empty(); }
         bool Has(const char* name) const { return m_names.find(name) != m_names.end(); }
         size_t Count() const { return m_names.size(); }
+
+        // Dump the full resolved map (only when RPW_VTDEBUG is set). Handy for a
+        // tester to paste back so drift on their build can be diagnosed.
+        void DebugDump() const
+        {
+            if (!DebugEnabled())
+                return;
+            Log("[vt] --- %zu resolved methods ---\n", m_names.size());
+            for (std::unordered_map<std::string, int>::const_iterator it = m_names.begin();
+                 it != m_names.end(); ++it)
+                Log("[vt]   %-48s -> %d\n", it->first.c_str(), it->second);
+        }
 
         // Resolved vtable index for a method, or -1 if its stub didn't embed a
         // name (a few don't). Such a method can still be reached by anchoring to

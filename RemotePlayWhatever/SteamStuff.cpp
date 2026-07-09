@@ -85,10 +85,14 @@ bool ClientContext::Init()
     // call through the resolved index. Confirm the methods we use exist on this
     // build before anything calls through the proxy.
     m_remoteManager.Bind(pRemoteManager);
+    m_remoteManager.DebugDump(); // no-op unless RPW_VTDEBUG is set
     if (!m_remoteManager.Ok()
         || !m_remoteManager.Has("BCreateRemotePlayInviteAndSession")
         || !m_remoteManager.Has("ShowRemotePlayTogetherUI"))
     {
+        clientvt::Log("[vt] Init: RCM method resolution FAILED "
+                      "(ok=%d count=%zu) — refusing to call into wrong slots\n",
+                      (int)m_remoteManager.Ok(), m_remoteManager.Count());
         return false;
     }
 

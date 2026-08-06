@@ -189,7 +189,13 @@ namespace clientvt
         if (!codeHi)
             return std::string();
 
-        for (int k = 0; k < 220; ++k)
+        // Scan window (bytes into the stub). The name-loading `lea` sits near the
+        // top of the function, but on Linux (steamclient.so) the telemetry-scope
+        // string is emitted deeper in the prologue than on Windows, so a tight cap
+        // misses it for some methods and they resolve to -1. 300 covers both; the
+        // window is only an upper bound — the per-segment guard below stops the
+        // scan at the real end of .text, so a larger cap is free and safe.
+        for (int k = 0; k < 300; ++k)
         {
             if (fn + k + 7 > codeHi) // instruction bytes must stay in this segment
                 break;

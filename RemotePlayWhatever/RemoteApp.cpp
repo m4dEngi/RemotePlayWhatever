@@ -3,6 +3,7 @@
 #include "RemoteApp.h"
 #include "wxSteamStuff.h"
 #include "FriendsListFrame.h"
+#include "ControlFrame.h"
 
 static const wxCmdLineEntryDesc cmdLineDesc[] =
 {
@@ -17,6 +18,7 @@ static const wxCmdLineEntryDesc cmdLineDesc[] =
 
 RemoteApp::RemoteApp():
     m_inviteHandler(nullptr),
+    m_controlFrame(nullptr),
     m_oneshot(false),
     m_guestID(1),
     m_nonSteamID(0),
@@ -62,6 +64,9 @@ int RemoteApp::OnRun()
         m_friendsList = new FriendsListFrame(m_inviteHandler);
         m_friendsList->Show(true);
 
+        // Hidden until a guest connects, then it pops itself up.
+        m_controlFrame = new ControlFrame(m_inviteHandler);
+
         return wxApp::OnRun();
     }
 
@@ -76,6 +81,7 @@ int RemoteApp::OnRun()
         {
             // look at me... i'm the main event loop now
             GClientContext()->RunCallbacks();
+            m_inviteHandler->GroupTick();   // fire the async (group-gated) invite
 
             wxMilliSleep(200);
         }
@@ -162,6 +168,22 @@ void RemoteApp::OnInitCmdLine(wxCmdLineParser &parser)
 void RemoteAppCallbackRunner::Notify()
 {
     GClientContext()->RunCallbacks();
+
+    RemoteApp* app = static_cast<RemoteApp*>(wxTheApp);
+    if (app && app->GetInviteHandler())
+    {
+        // Advance async group creation / flush queued invites every tick.
+        app->GetInviteHandler()->GroupTick();
+
+        // Re-assert guest control roughly every 2s (10 ticks @ 200ms) so Steam
+        // can't silently reset the per-user input we granted.
+        static int s_tick = 0;
+        if (++s_tick >= 10)
+        {
+            s_tick = 0;
+            app->GetInviteHandler()->GrantControlTick();
+        }
+    }
 }
 
 

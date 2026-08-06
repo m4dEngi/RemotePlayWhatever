@@ -2,6 +2,19 @@
 #define REMOTEPLAYINVITEHANDLER_H
 
 #include <Steamworks.h>
+#include <vector>
+
+// A guest that has connected to our Remote Play Together session. We remember
+// the exact RemotePlayPlayer_t Steam handed us on connect (correct SteamID,
+// guest id and group id) plus the per-peripheral control state the host wants.
+struct ConnectedGuest
+{
+    RemotePlayPlayer_t player;
+    uint64 steamID;
+    bool wantKbd;
+    bool wantMouse;
+    bool wantCtrl;
+};
 
 class RemotePlayInviteHandler
 {
@@ -17,12 +30,44 @@ public:
 
     AppId_t GetNonSteamAppID();
 
+    // Called every app-timer tick (~200ms). Advances async group creation and
+    // fires any queued invites once the group is ready (so SendInvite never
+    // blocks the UI). Cheap no-op when there's nothing pending.
+    void GroupTick();
+
+    // Called periodically (from the app callback timer) to re-assert each
+    // guest's desired input state so Steam can't silently reset it.
+    void GrantControlTick();
+
+    // Roster access + per-guest control, driven by the control window UI.
+    const std::vector<ConnectedGuest>& Guests() const { return m_guests; }
+    void SetGuestInput(uint64 steamID, bool kbd, bool mouse, bool ctrl);
+    // Bumped whenever the roster changes (guest joins/leaves) so the UI can
+    // tell when to rebuild itself.
+    uint32 RosterRevision() const { return m_rosterRevision; }
+
 private:
+    void ApplyGuest(const ConnectedGuest& g);
+
+    // Async group creation. Stock RPW hardcodes groupID=1 without ever creating
+    // a group; we create/settle one first, then fire the queued invite(s).
+    enum EGroupState { GroupNone, GroupWaiting, GroupReady };
+    struct PendingInvite { CSteamID invitee; AppId_t appID; };
+
     bool m_enabledDesktopStreaming;
     uint32 m_remoteGuestID;
     uint32 m_groupID;
     AppId_t m_nonsteamAppID;
 
+    EGroupState m_groupState;
+    int m_groupTicks;
+    bool m_calledCreate;
+    std::vector<PendingInvite> m_pending;
+
+    std::vector<ConnectedGuest> m_guests;
+    uint32 m_rosterRevision;
+
+    STEAM_CALLBACK(RemotePlayInviteHandler, OnRemotePlayStart, RemoteClientStartStreamSession_t, m_remoteStartCb);
     STEAM_CALLBACK(RemotePlayInviteHandler, OnRemotePlayStop, RemoteClientStopStreamSession_t, m_remoteStopCb);
     STEAM_CALLBACK(RemotePlayInviteHandler, OnRemotePlayInviteResult, RemotePlayInviteResult_t, m_remoteInviteResultCb);
 };

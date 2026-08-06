@@ -6,8 +6,13 @@ RemotePlayInviteHandler::RemotePlayInviteHandler() :
     m_remoteGuestID(1),
     m_nonsteamAppID(0),
     m_groupID(1),
-    m_remoteInviteResultCb(this, &RemotePlayInviteHandler::OnRemotePlayInviteResult),
-    m_remoteStopCb(this, &RemotePlayInviteHandler::OnRemotePlayStop)
+    m_groupState(GroupNone),
+    m_groupTicks(0),
+    m_calledCreate(false),
+    m_rosterRevision(0),
+    m_remoteStartCb(this, &RemotePlayInviteHandler::OnRemotePlayStart),
+    m_remoteStopCb(this, &RemotePlayInviteHandler::OnRemotePlayStop),
+    m_remoteInviteResultCb(this, &RemotePlayInviteHandler::OnRemotePlayInviteResult)
 {
 }
 
@@ -16,6 +21,9 @@ AppId_t RemotePlayInviteHandler::GetNonSteamAppID()
     return m_nonsteamAppID;
 }
 
+// Queue an invite and kick off async group creation. The actual Steam invite is
+// fired from GroupTick() once the group is ready, so this returns immediately
+// and never blocks the UI (stock RPW hardcoded groupID=1 and never created one).
 void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
 {
     CGameID gameID = GetRunningGameID();
@@ -25,20 +33,87 @@ void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
         return;
     }
 
-    RemotePlayPlayer_t rppInvitee = { invitee, m_remoteGuestID, m_groupID, 0, 0, 0 };
-    ++m_remoteGuestID;
+    bool desktop = !(gameID.IsSteamApp() && gameID.AppID() != m_nonsteamAppID);
+    AppId_t appID = desktop ? m_nonsteamAppID : gameID.AppID();
 
-    if (gameID.IsSteamApp() && gameID.AppID() != m_nonsteamAppID)
-    {
-        GClientContext()->RemoteClientManager()->BCreateRemotePlayInviteAndSession(rppInvitee, gameID.AppID());
-    }
-    else
+    if (desktop && !m_enabledDesktopStreaming)
     {
         GClientContext()->RemoteClientManager()->SetStreamingDesktopToRemotePlayTogetherEnabled(true);
-
         m_enabledDesktopStreaming = true;
+    }
 
-        GClientContext()->RemoteClientManager()->BCreateRemotePlayInviteAndSession(rppInvitee, m_nonsteamAppID);
+    PendingInvite pi;
+    pi.invitee = invitee;
+    pi.appID = appID;
+    m_pending.push_back(pi);
+
+    if (m_groupState == GroupNone)
+    {
+        CRemoteClientManagerByName* rcm = GClientContext()->RemoteClientManager();
+        uint32 g = rcm->GetLocalRemotePlayTogetherGroupID();
+        if (g)
+        {
+            m_groupID = g;
+            m_groupState = GroupReady;      // reuse an already-hosted group
+        }
+        else
+        {
+            if (appID)
+            {
+                rcm->ShowRemotePlayTogetherUI(appID);
+            }
+            m_groupState = GroupWaiting;
+            m_groupTicks = 0;
+            m_calledCreate = false;
+        }
+    }
+    // If already Waiting/Ready, the invite just rides along on the existing group.
+}
+
+// Drives async group creation and flushes queued invites. Runs every ~200ms.
+void RemotePlayInviteHandler::GroupTick()
+{
+    if (m_groupState == GroupWaiting)
+    {
+        CRemoteClientManagerByName* rcm = GClientContext()->RemoteClientManager();
+        uint32 g = rcm->GetLocalRemotePlayTogetherGroupID();  // polling settles it
+        if (g)
+        {
+            m_groupID = g;
+            m_groupState = GroupReady;
+        }
+        else
+        {
+            ++m_groupTicks;
+            if (!m_calledCreate && m_groupTicks >= 12)   // ~2.4s settle, then create
+            {
+                rcm->BCreateRemotePlayGroup();
+                m_calledCreate = true;
+            }
+            if (m_groupTicks >= 35)                        // ~7s: give up, fall back
+            {
+                m_groupID = 1;
+                m_groupState = GroupReady;
+            }
+        }
+    }
+
+    if (m_groupState == GroupReady && !m_pending.empty())
+    {
+        CRemoteClientManagerByName* rcm = GClientContext()->RemoteClientManager();
+        for (size_t i = 0; i < m_pending.size(); ++i)
+        {
+            uint32 guest = rcm->GetAvailableRemotePlayTogetherGuestID(m_groupID);
+            if (!guest)
+            {
+                guest = m_remoteGuestID;
+            }
+            m_remoteGuestID = guest + 1;
+
+            RemotePlayPlayer_t rppInvitee = { m_pending[i].invitee, guest, m_groupID, 0, 0, 0 };
+            rcm->BCreateRemotePlayInviteAndSession(rppInvitee, m_pending[i].appID);
+        }
+        m_pending.clear();
     }
 }
 
@@ -59,6 +134,67 @@ void RemotePlayInviteHandler::SetNonSteamAppID(AppId_t appID)
 void RemotePlayInviteHandler::SetGuestID(uint32 guestID)
 {
     m_remoteGuestID = guestID;
+}
+
+// Enable the guest's chosen peripherals. SetPerUser* takes the exact
+// RemotePlayPlayer_t Steam gave us on connect; on drifted builds this is the
+// only way to hand a guest control (they never appear in the overlay list).
+void RemotePlayInviteHandler::ApplyGuest(const ConnectedGuest& g)
+{
+    CRemoteClientManagerByName* rcm = GClientContext()->RemoteClientManager();
+    rcm->SetPerUserKeyboardInputEnabled(g.player, g.wantKbd);
+    rcm->SetPerUserMouseInputEnabled(g.player, g.wantMouse);
+    rcm->SetPerUserControllerInputEnabled(g.player, g.wantCtrl);
+}
+
+void RemotePlayInviteHandler::GrantControlTick()
+{
+    for (size_t i = 0; i < m_guests.size(); ++i)
+    {
+        ApplyGuest(m_guests[i]);
+    }
+}
+
+void RemotePlayInviteHandler::SetGuestInput(uint64 steamID, bool kbd, bool mouse, bool ctrl)
+{
+    for (size_t i = 0; i < m_guests.size(); ++i)
+    {
+        if (m_guests[i].steamID == steamID)
+        {
+            m_guests[i].wantKbd = kbd;
+            m_guests[i].wantMouse = mouse;
+            m_guests[i].wantCtrl = ctrl;
+            ApplyGuest(m_guests[i]);
+            return;
+        }
+    }
+}
+
+// A guest connected. Steam hands us their real RemotePlayPlayer_t (SteamID,
+// guest id, group id) in the callback, so we can grant control immediately.
+void RemotePlayInviteHandler::OnRemotePlayStart(RemoteClientStartStreamSession_t* cb)
+{
+    uint64 id = cb->m_player.m_playerID.ConvertToUint64();
+
+    for (size_t i = 0; i < m_guests.size(); ++i)
+    {
+        if (m_guests[i].steamID == id)
+        {
+            m_guests[i].player = cb->m_player;  // refresh with latest struct
+            ApplyGuest(m_guests[i]);
+            return;
+        }
+    }
+
+    ConnectedGuest g;
+    g.player = cb->m_player;
+    g.steamID = id;
+    g.wantKbd = true;
+    g.wantMouse = true;
+    g.wantCtrl = true;              // default: give a new guest full control
+    m_guests.push_back(g);
+    ++m_rosterRevision;
+    ApplyGuest(g);
 }
 
 void RemotePlayInviteHandler::OnRemotePlayInviteResult(RemotePlayInviteResult_t* inviteResultCb)
@@ -82,5 +218,23 @@ void RemotePlayInviteHandler::OnRemotePlayStop(RemoteClientStopStreamSession_t* 
     {
         GClientContext()->RemoteClientManager()->SetStreamingDesktopToRemotePlayTogetherEnabled(false);
         m_remoteGuestID = 1;
+        m_guests.clear();
+        ++m_rosterRevision;
+        // The session is gone; a future invite must create a fresh group.
+        m_groupState = GroupNone;
+        m_calledCreate = false;
+        m_pending.clear();
+        return;
+    }
+
+    uint64 stoppedId = streamStopCb->m_player.m_playerID.ConvertToUint64();
+    for (size_t i = 0; i < m_guests.size(); ++i)
+    {
+        if (m_guests[i].steamID == stoppedId)
+        {
+            m_guests.erase(m_guests.begin() + i);
+            ++m_rosterRevision;
+            break;
+        }
     }
 }

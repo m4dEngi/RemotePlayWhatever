@@ -62,17 +62,32 @@ bool RemoteApp::OnInit()
 
     if (!GClientContext()->Init())
     {
+        wxString why;
+        switch (GClientContext()->InitError())
+        {
+        case ClientContext::InitNotSignedIn:
+            why = "Steam is running, but nobody is signed in. Sign in to Steam, then open Remote Play Whatever again.";
+            break;
+        case ClientContext::InitMethodsMissing:
+            why = "A Steam update changed the internal Remote Play functions this app uses, "
+                  "so Remote Play Whatever needs an update before it can work with this Steam version.";
+            break;
+        default:
+            why = "Steam isn't running. Start Steam and sign in, then open Remote Play Whatever again.";
+            break;
+        }
+
 #ifndef _WIN32
         if(!m_oneshot)
 #endif
             wxMessageBox
             (
-                "Could not initialize steam client library!",
-                "Error",
+                why,
+                "Remote Play Whatever",
                 wxOK | wxICON_ERROR
             );
 
-        std::cout << "Error: Could not initialize steam client library!" << std::endl;
+        std::cout << "Error: Could not initialize steam client library! " << why.utf8_str().data() << std::endl;
 
         return false;
     }

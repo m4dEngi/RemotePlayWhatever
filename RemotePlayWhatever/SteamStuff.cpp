@@ -6,11 +6,14 @@
 ClientContext::ClientContext():
     m_hPipe(0),
     m_hUser(0),
+    m_pSteamClient(nullptr),
     m_pSteamUser(nullptr),
     m_pSteamFriends(nullptr),
-    m_pSteamClient(nullptr),
+    m_pSteamUtils(nullptr),
     m_pClientEngine(nullptr),
-    m_ShuttingDown(false)
+    m_ShuttingDown(false),
+    m_Initialized(false),
+    m_initError(InitOK)
 {
 }
 
@@ -24,6 +27,9 @@ bool ClientContext::Init()
     {
         return true;
     }
+
+    // Until something more specific is known, failing means Steam isn't there.
+    m_initError = InitSteamNotRunning;
 
     if (!OpenAPI_LoadLibrary())
     {
@@ -45,8 +51,11 @@ bool ClientContext::Init()
     m_hUser = m_pSteamClient->ConnectToGlobalUser(m_hPipe);
     if (!m_hUser)
     {
+        m_initError = InitNotSignedIn;
         return false;
     }
+
+    m_initError = InitMethodsMissing;
 
     m_pSteamUser = (ISteamUser019*)m_pSteamClient->GetISteamUser(m_hUser, m_hPipe, STEAMUSER_INTERFACE_VERSION_019);
     if (!m_pSteamUser)
@@ -96,6 +105,7 @@ bool ClientContext::Init()
         return false;
     }
 
+    m_initError = InitOK;
     return m_Initialized = true;
 }
 

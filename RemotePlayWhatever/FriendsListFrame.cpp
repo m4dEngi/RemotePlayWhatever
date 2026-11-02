@@ -3,10 +3,13 @@
 #include <cstring>
 #include "FriendsListFrame.h"
 #include "FriendPanel.h"
+#include "GameInfo.h"
 
+static const wxColour kReadyGreen(30, 130, 50);
 
 FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
     wxFrame(NULL, wxID_ANY, _("Remote Play Whatever"), wxPoint(50, 50), wxSize(275, 650)),
+    m_status(nullptr),
     m_tick(this),
     m_askingGroupFallback(false),
     m_remoteInviteResultCb(this, &FriendsListFrame::OnRemotePlayInviteResult),
@@ -20,6 +23,16 @@ FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
     m_pRemoteInvite = handler;
 
     wxBoxSizer* frameSizer = new wxBoxSizer( wxVERTICAL );
+
+    // What will be shared, so it's clear before inviting anyone.
+    wxPanel* statusPanel = new wxPanel(this, wxID_ANY);
+    statusPanel->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+    wxBoxSizer* statusSizer = new wxBoxSizer(wxVERTICAL);
+    m_status = new wxStaticText(statusPanel, wxID_ANY, wxEmptyString);
+    m_status->SetFont(m_status->GetFont().Bold());
+    statusSizer->Add(m_status, 0, wxALL | wxEXPAND, 10);
+    statusPanel->SetSizer(statusSizer);
+    frameSizer->Add(statusPanel, 0, wxEXPAND | wxBOTTOM, 1);
 
     m_friendsListContainer = new wxScrolledWindow( this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL );
     m_friendsListContainer->SetScrollRate( 5, 5 );
@@ -54,10 +67,50 @@ FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
     Bind(BTN_PANEL_LEFT_CLICK, &FriendsListFrame::OnGuestPanelClick, this, rpwID_INVITE_GUEST);
     Bind(wxEVT_TIMER, &FriendsListFrame::OnTick, this);
     m_tick.Start(500);
+    UpdateStatus();
+}
+
+void FriendsListFrame::UpdateStatus()
+{
+    wxString text;
+    wxColour colour = wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT);
+
+    if (!GClientContext()->SteamUser()->BLoggedOn())
+    {
+        text = "Steam isn't signed in.";
+    }
+    else
+    {
+        CGameID game = GetRunningGameID();
+        if (!game.IsValid())
+        {
+            text = "No game running. Start a game through Steam, then invite someone.";
+        }
+        else if (game.IsSteamApp() && game.AppID() != m_pRemoteInvite->GetNonSteamAppID())
+        {
+            text = "Ready to share: " + GetSteamAppName(game.AppID());
+            colour = kReadyGreen;
+        }
+        else
+        {
+            text = "Ready to share a non-Steam game (your whole screen is shared).";
+            colour = kReadyGreen;
+        }
+    }
+
+    if (text != m_statusShown)
+    {
+        m_statusShown = text;
+        m_status->SetLabel(text);
+        m_status->SetForegroundColour(colour);
+        m_status->Wrap(FromDIP(235));
+        Layout();
+    }
 }
 
 void FriendsListFrame::OnTick(wxTimerEvent&)
 {
+    UpdateStatus();
     // Timers keep firing while a message box is open, so don't ask twice.
     if (m_pRemoteInvite->HasGroupFailure() && !m_askingGroupFallback)
     {

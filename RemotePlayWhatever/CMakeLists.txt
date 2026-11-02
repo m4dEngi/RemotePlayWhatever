@@ -78,6 +78,8 @@ set(APPSRCs "RemotePlayWhatever.cpp"
             "FriendPanel.cpp"
             "wxSteamStuff.h"
             "wxSteamStuff.cpp"
+            "GameInfo.h"
+            "GameInfo.cpp"
 )
 
 

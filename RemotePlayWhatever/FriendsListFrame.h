@@ -32,7 +32,10 @@ private:
     void OnFriendPanelClick(wxCommandEvent& event);
     void OnGuestPanelClick(wxCommandEvent& event);
     void OnTick(wxTimerEvent& event);
+    void UpdateStatus();
 
+    wxStaticText* m_status;
+    wxString m_statusShown;
     wxTimer m_tick;
     bool m_askingGroupFallback;
 

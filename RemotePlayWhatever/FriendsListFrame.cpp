@@ -15,8 +15,10 @@ FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
     wxFrame(NULL, wxID_ANY, _("Remote Play Whatever"), wxPoint(50, 50), wxSize(275, 650)),
     m_search(nullptr),
     m_status(nullptr),
+    m_copyLinkButton(nullptr),
     m_endButton(nullptr),
     m_noticeUntil(0),
+    m_copiedUntil(0),
     m_tick(this),
     m_askingGroupFallback(false),
     m_remoteInviteResultCb(this, &FriendsListFrame::OnRemotePlayInviteResult),
@@ -38,11 +40,18 @@ FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
     m_status = new wxStaticText(statusPanel, wxID_ANY, wxEmptyString);
     m_status->SetFont(m_status->GetFont().Bold());
     statusSizer->Add(m_status, 0, wxALL | wxEXPAND, 10);
+    wxBoxSizer* sessionButtons = new wxBoxSizer(wxHORIZONTAL);
+    m_copyLinkButton = new wxButton(statusPanel, wxID_ANY, "Copy guest link");
+    m_copyLinkButton->SetToolTip("Copy this session's guest link again.");
+    m_copyLinkButton->Bind(wxEVT_BUTTON, &FriendsListFrame::OnCopyLink, this);
+    m_copyLinkButton->Hide();
+    sessionButtons->Add(m_copyLinkButton, 1, wxRIGHT, 6);
     m_endButton = new wxButton(statusPanel, wxID_ANY, "End session");
     m_endButton->SetToolTip("Disconnect everyone, cancel unused invites and guest links, and stop sharing your screen.");
     m_endButton->Bind(wxEVT_BUTTON, &FriendsListFrame::OnEndSession, this);
     m_endButton->Hide();
-    statusSizer->Add(m_endButton, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 10);
+    sessionButtons->Add(m_endButton, 1);
+    statusSizer->Add(sessionButtons, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 10);
     statusPanel->SetSizer(statusSizer);
     frameSizer->Add(statusPanel, 0, wxEXPAND | wxBOTTOM, 1);
 
@@ -187,10 +196,34 @@ void FriendsListFrame::UpdateStatus()
         m_endButton->Show(session);
         relayout = true;
     }
+    bool hasLink = session && !m_pRemoteInvite->GuestLink().empty();
+    if (m_copyLinkButton->IsShown() != hasLink)
+    {
+        m_copyLinkButton->Show(hasLink);
+        relayout = true;
+    }
+    if (m_copiedUntil != 0 && wxGetLocalTimeMillis() >= m_copiedUntil)
+    {
+        m_copyLinkButton->SetLabel("Copy guest link");
+        m_copiedUntil = 0;
+    }
     if (relayout)
     {
         m_status->GetParent()->Layout();
         Layout();
+    }
+}
+
+void FriendsListFrame::OnCopyLink(wxCommandEvent&)
+{
+    wxString link = wxString::FromUTF8(m_pRemoteInvite->GuestLink().c_str());
+    if (!link.empty() && wxTheClipboard->Open())
+    {
+        wxTheClipboard->SetData(new wxTextDataObject(link));
+        wxTheClipboard->Flush();
+        wxTheClipboard->Close();
+        m_copyLinkButton->SetLabel("Copied!");
+        m_copiedUntil = wxGetLocalTimeMillis() + 2000;
     }
 }
 

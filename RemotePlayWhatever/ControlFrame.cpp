@@ -20,7 +20,7 @@ enum
 };
 
 ControlFrame::ControlFrame(RemotePlayInviteHandler* handler) :
-    wxFrame(NULL, wxID_ANY, "Remote Play Control", wxDefaultPosition, wxSize(420, 460)),
+    wxFrame(NULL, wxID_ANY, "Remote Play Control", wxDefaultPosition, wxSize(520, 460)),
     m_handler(handler),
     m_hotkeyHint(nullptr),
     m_timer(this),
@@ -38,6 +38,21 @@ ControlFrame::ControlFrame(RemotePlayInviteHandler* handler) :
     m_hotkeyHint = new wxStaticText(this, wxID_ANY, wxEmptyString);
     m_hotkeyHint->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
     frameSizer->Add(m_hotkeyHint, 0, wxALL | wxEXPAND, 8);
+
+    wxButton* endButton = new wxButton(this, wxID_ANY, "End session");
+    endButton->SetToolTip("Disconnect everyone, cancel unused invites and guest links, and stop sharing your screen.");
+    endButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&)
+    {
+        int answer = wxMessageBox(
+            "Disconnect everyone and stop sharing?\n\nUnused invites and guest links will stop working too.",
+            "Remote Play Control", wxYES_NO | wxICON_QUESTION, this);
+        if (answer == wxYES)
+        {
+            m_handler->EndSession();
+            Rebuild();
+        }
+    });
+    frameSizer->Add(endButton, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxALIGN_RIGHT, 8);
     SetSizer(frameSizer);
 
     RegisterHotKeys();
@@ -91,7 +106,7 @@ void ControlFrame::RegisterHotKeys()
     }
 #endif
     m_hotkeyHint->SetLabel(hint);
-    m_hotkeyHint->Wrap(FromDIP(390));
+    m_hotkeyHint->Wrap(FromDIP(490));
     m_hotkeyHint->Show(!hint.empty());
 }
 
@@ -257,6 +272,7 @@ void ControlFrame::Rebuild()
             AddToggle(row, rs, "Keyboard",   m_handler->AllGuestsHave(0), kEveryone, 0);
             AddToggle(row, rs, "Mouse",      m_handler->AllGuestsHave(1), kEveryone, 1);
             AddToggle(row, rs, "Controller", m_handler->AllGuestsHave(2), kEveryone, 2);
+            rs->AddSpacer(76);  // lines the toggles up with the guest rows' Remove column
             row->SetSizer(rs);
             m_sizer->Add(row, 0, wxEXPAND | wxALL, 2);
         }
@@ -283,6 +299,26 @@ void ControlFrame::Rebuild()
             AddToggle(row, rs, "Keyboard",   g.wantKbd,   g.key, 0);
             AddToggle(row, rs, "Mouse",      g.wantMouse, g.key, 1);
             AddToggle(row, rs, "Controller", g.wantCtrl,  g.key, 2);
+
+            wxButton* remove = new wxButton(row, wxID_ANY, "Remove", wxDefaultPosition, wxSize(70, 30));
+            remove->SetToolTip("Disconnect " + name + " from the session");
+            const uint64 key = g.key;
+            remove->Bind(wxEVT_BUTTON, [this, key, name](wxCommandEvent&)
+            {
+                // Ask after the click is handled: removing rebuilds the window,
+                // which destroys this button.
+                CallAfter([this, key, name]()
+                {
+                    int answer = wxMessageBox("Remove " + name + " from the session?",
+                                              "Remote Play Control", wxYES_NO | wxICON_QUESTION, this);
+                    if (answer == wxYES)
+                    {
+                        m_handler->RemoveGuest(key);
+                        Rebuild();
+                    }
+                });
+            });
+            rs->Add(remove, 0, wxALL | wxALIGN_CENTER_VERTICAL, 3);
 
             row->SetSizer(rs);
             m_sizer->Add(row, 0, wxEXPAND | wxALL, 2);

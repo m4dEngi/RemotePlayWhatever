@@ -69,6 +69,11 @@ public:
     void SessionTick();
     // One-off message for the UI (e.g. why a session ended), cleared on read.
     std::string TakeNotice();
+    // Disconnect one guest (their invite is cancelled too, so they can't rejoin
+    // with it). Others stay connected.
+    void RemoveGuest(uint64 key);
+    // The current session's guest link (with https://), or empty if none.
+    const std::string& GuestLink() const { return m_guestLink; }
 
     // Roster access + per-guest control, driven by the control window UI.
     const std::vector<ConnectedGuest>& Guests() const { return m_guests; }
@@ -114,6 +119,7 @@ private:
     uint64 m_sessionGame;       // game the current session is for (CGameID)
     int m_sessionGameGoneTicks;
     std::string m_notice;
+    std::string m_guestLink;
 
     std::vector<ConnectedGuest> m_guests;
     uint32 m_rosterRevision;

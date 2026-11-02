@@ -210,7 +210,45 @@ void RemotePlayInviteHandler::ResetSession()
     m_pending.clear();
     m_invited.clear();
     m_guests.clear();
+    m_guestLink.clear();
     ++m_rosterRevision;
+}
+
+void RemotePlayInviteHandler::RemoveGuest(uint64 key)
+{
+    CRemoteClientManagerByName* rcm = GClientContext()->RemoteClientManager();
+    for (size_t i = 0; i < m_guests.size(); ++i)
+    {
+        if (m_guests[i].key != key)
+        {
+            continue;
+        }
+
+        ConnectedGuest g = m_guests[i];
+        m_guests.erase(m_guests.begin() + i);
+        ++m_rosterRevision;
+
+        if (g.sessionID)
+        {
+            rcm->StopStreamingSession(g.sessionID);
+        }
+        rcm->CancelRemotePlayInviteAndSession(g.player);
+
+        // A friend's own invite would let them straight back in; cancel it too.
+        for (size_t j = 0; j < m_invited.size();)
+        {
+            if (g.steamID && m_invited[j].m_playerID.ConvertToUint64() == g.steamID)
+            {
+                rcm->CancelRemotePlayInviteAndSession(m_invited[j]);
+                m_invited.erase(m_invited.begin() + j);
+            }
+            else
+            {
+                ++j;
+            }
+        }
+        return;
+    }
 }
 
 void RemotePlayInviteHandler::SessionTick()
@@ -473,6 +511,10 @@ void RemotePlayInviteHandler::OnRemotePlayInviteResult(RemotePlayInviteResult_t*
         {
             std::string msg = "Follow this link to join remote game: " + ClickableURL(inviteResultCb->m_szConnectURL);
             GClientContext()->SteamFriends()->ReplyToFriendMessage(inviteResultCb->m_player.m_playerID, msg.c_str());
+        }
+        else
+        {
+            m_guestLink = ClickableURL(inviteResultCb->m_szConnectURL);
         }
         GClientContext()->RemoteClientManager()->ShowRemotePlayTogetherUI(GetRunningGameID().AppID());
     }

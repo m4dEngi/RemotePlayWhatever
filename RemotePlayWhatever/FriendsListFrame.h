@@ -36,15 +36,18 @@ private:
     void OnTick(wxTimerEvent& event);
     void OnClose(wxCloseEvent& event);
     void OnEndSession(wxCommandEvent& event);
+    void OnCopyLink(wxCommandEvent& event);
     void UpdateStatus();
     void ApplyFilter();
 
     wxSearchCtrl* m_search;
     wxStaticText* m_status;
+    wxButton* m_copyLinkButton;
     wxButton* m_endButton;
     wxString m_statusShown;
     wxString m_notice;
     wxLongLong m_noticeUntil;
+    wxLongLong m_copiedUntil;
     wxTimer m_tick;
     bool m_askingGroupFallback;
 

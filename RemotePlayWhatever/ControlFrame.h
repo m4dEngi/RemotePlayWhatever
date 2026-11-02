@@ -16,13 +16,16 @@ private:
     void Rebuild();
     void OnPoll(wxTimerEvent& evt);
     void AddToggle(wxWindow* parent, wxSizer* sizer, const wxString& label,
-                   bool on, uint64 steamID, int which);
+                   bool on, uint64 guestKey, int which);
+    // Name shown for a guest; sets placeholder when Steam doesn't know it yet.
+    wxString GuestName(const ConnectedGuest& g, bool& placeholder);
 
     RemotePlayInviteHandler* m_handler;
     wxScrolledWindow* m_container;
     wxBoxSizer* m_sizer;
     wxTimer m_timer;
     uint32 m_lastRevision;
+    bool m_waitingForNames;
 };
 
 #endif // CONTROLFRAME_H

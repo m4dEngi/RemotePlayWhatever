@@ -10,7 +10,8 @@
 struct ConnectedGuest
 {
     RemotePlayPlayer_t player;
-    uint64 steamID;
+    uint64 key;         // unique per guest, see RemotePlayInviteHandler::GuestKey
+    uint64 steamID;     // 0 for Steam Link guests who joined without a Steam account
     bool wantKbd;
     bool wantMouse;
     bool wantCtrl;
@@ -41,7 +42,12 @@ public:
 
     // Roster access + per-guest control, driven by the control window UI.
     const std::vector<ConnectedGuest>& Guests() const { return m_guests; }
-    void SetGuestInput(uint64 steamID, bool kbd, bool mouse, bool ctrl);
+    void SetGuestInput(uint64 key, bool kbd, bool mouse, bool ctrl);
+
+    // Guests with a Steam account are identified by their SteamID. Steam Link
+    // guests without an account all report SteamID 0, so they're identified by
+    // their guest slot instead (a value that can never be a real SteamID).
+    static uint64 GuestKey(const RemotePlayPlayer_t& player);
     // Bumped whenever the roster changes (guest joins/leaves) so the UI can
     // tell when to rebuild itself.
     uint32 RosterRevision() const { return m_rosterRevision; }

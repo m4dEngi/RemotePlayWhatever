@@ -155,11 +155,11 @@ void RemotePlayInviteHandler::GrantControlTick()
     }
 }
 
-void RemotePlayInviteHandler::SetGuestInput(uint64 steamID, bool kbd, bool mouse, bool ctrl)
+void RemotePlayInviteHandler::SetGuestInput(uint64 key, bool kbd, bool mouse, bool ctrl)
 {
     for (size_t i = 0; i < m_guests.size(); ++i)
     {
-        if (m_guests[i].steamID == steamID)
+        if (m_guests[i].key == key)
         {
             m_guests[i].wantKbd = kbd;
             m_guests[i].wantMouse = mouse;
@@ -170,15 +170,31 @@ void RemotePlayInviteHandler::SetGuestInput(uint64 steamID, bool kbd, bool mouse
     }
 }
 
+uint64 RemotePlayInviteHandler::GuestKey(const RemotePlayPlayer_t& player)
+{
+    if (player.m_playerID.GetAccountID() != 0)
+    {
+        return player.m_playerID.ConvertToUint64();
+    }
+    return 0xFFFFFFFF00000000ULL | player.m_unGuestID;
+}
+
 // A guest connected. Steam hands us their real RemotePlayPlayer_t (SteamID,
 // guest id, group id) in the callback, so we can grant control immediately.
 void RemotePlayInviteHandler::OnRemotePlayStart(RemoteClientStartStreamSession_t* cb)
 {
-    uint64 id = cb->m_player.m_playerID.ConvertToUint64();
+    // Our own stream isn't a guest.
+    if (cb->m_player.m_playerID.GetAccountID() != 0 &&
+        cb->m_player.m_playerID == GClientContext()->SteamUser()->GetSteamID())
+    {
+        return;
+    }
+
+    uint64 key = GuestKey(cb->m_player);
 
     for (size_t i = 0; i < m_guests.size(); ++i)
     {
-        if (m_guests[i].steamID == id)
+        if (m_guests[i].key == key)
         {
             m_guests[i].player = cb->m_player;  // refresh with latest struct
             ApplyGuest(m_guests[i]);
@@ -188,12 +204,20 @@ void RemotePlayInviteHandler::OnRemotePlayStart(RemoteClientStartStreamSession_t
 
     ConnectedGuest g;
     g.player = cb->m_player;
-    g.steamID = id;
+    g.key = key;
+    g.steamID = cb->m_player.m_playerID.GetAccountID() != 0 ? cb->m_player.m_playerID.ConvertToUint64() : 0;
     g.wantKbd = true;
     g.wantMouse = true;
     g.wantCtrl = true;              // default: give a new guest full control
     m_guests.push_back(g);
     ++m_rosterRevision;
+
+    if (g.steamID)
+    {
+        // Someone who joined through a guest link may not be a friend, so ask
+        // Steam for their name for the control window.
+        GClientContext()->SteamFriends()->RequestUserInformation(cb->m_player.m_playerID, true);
+    }
     ApplyGuest(g);
 }
 
@@ -225,10 +249,10 @@ void RemotePlayInviteHandler::OnRemotePlayStop(RemoteClientStopStreamSession_t* 
         return;
     }
 
-    uint64 stoppedId = streamStopCb->m_player.m_playerID.ConvertToUint64();
+    uint64 stoppedKey = GuestKey(streamStopCb->m_player);
     for (size_t i = 0; i < m_guests.size(); ++i)
     {
-        if (m_guests[i].steamID == stoppedId)
+        if (m_guests[i].key == stoppedKey)
         {
             m_guests.erase(m_guests.begin() + i);
             ++m_rosterRevision;

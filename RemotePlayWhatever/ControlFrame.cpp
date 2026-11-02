@@ -8,7 +8,8 @@ ControlFrame::ControlFrame(RemotePlayInviteHandler* handler) :
     wxFrame(NULL, wxID_ANY, "Remote Play Control", wxDefaultPosition, wxSize(420, 460)),
     m_handler(handler),
     m_timer(this),
-    m_lastRevision((uint32)-1)
+    m_lastRevision((uint32)-1),
+    m_waitingForNames(false)
 {
     m_container = new wxScrolledWindow(this, wxID_ANY);
     m_container->SetScrollRate(0, 10);
@@ -27,7 +28,22 @@ ControlFrame::ControlFrame(RemotePlayInviteHandler* handler) :
 
 void ControlFrame::OnPoll(wxTimerEvent&)
 {
-    if (m_handler->RosterRevision() != m_lastRevision)
+    bool rebuild = m_handler->RosterRevision() != m_lastRevision;
+
+    // Names of guests who joined through a link arrive from Steam a moment
+    // after they connect; refresh once they're known.
+    if (!rebuild && m_waitingForNames)
+    {
+        const std::vector<ConnectedGuest>& guests = m_handler->Guests();
+        for (size_t i = 0; i < guests.size() && !rebuild; ++i)
+        {
+            bool placeholder = false;
+            GuestName(guests[i], placeholder);
+            rebuild = guests[i].steamID && !placeholder;
+        }
+    }
+
+    if (rebuild)
     {
         Rebuild();
     }
@@ -43,7 +59,7 @@ void ControlFrame::OnPoll(wxTimerEvent&)
 // A colored toggle: green = the guest has this peripheral, red = revoked.
 // Clicking flips just this one peripheral for this one guest.
 void ControlFrame::AddToggle(wxWindow* parent, wxSizer* sizer, const wxString& label,
-                             bool on, uint64 steamID, int which)
+                             bool on, uint64 guestKey, int which)
 {
     wxButton* btn = new wxButton(parent, wxID_ANY, label, wxDefaultPosition, wxSize(84, 30));
     btn->SetBackgroundColour(on ? kGreen : kRed);
@@ -51,12 +67,12 @@ void ControlFrame::AddToggle(wxWindow* parent, wxSizer* sizer, const wxString& l
     btn->SetToolTip(on ? label + ": granted (click to take)" : label + ": paused (click to give)");
     sizer->Add(btn, 0, wxALL | wxALIGN_CENTER_VERTICAL, 3);
 
-    btn->Bind(wxEVT_BUTTON, [this, steamID, which](wxCommandEvent&)
+    btn->Bind(wxEVT_BUTTON, [this, guestKey, which](wxCommandEvent&)
     {
         const std::vector<ConnectedGuest>& guests = m_handler->Guests();
         for (size_t i = 0; i < guests.size(); ++i)
         {
-            if (guests[i].steamID == steamID)
+            if (guests[i].key == guestKey)
             {
                 bool k = guests[i].wantKbd;
                 bool m = guests[i].wantMouse;
@@ -64,7 +80,7 @@ void ControlFrame::AddToggle(wxWindow* parent, wxSizer* sizer, const wxString& l
                 if (which == 0)      k = !k;
                 else if (which == 1) m = !m;
                 else                 c = !c;
-                m_handler->SetGuestInput(steamID, k, m, c);
+                m_handler->SetGuestInput(guestKey, k, m, c);
                 break;
             }
         }
@@ -72,9 +88,28 @@ void ControlFrame::AddToggle(wxWindow* parent, wxSizer* sizer, const wxString& l
     });
 }
 
+wxString ControlFrame::GuestName(const ConnectedGuest& g, bool& placeholder)
+{
+    placeholder = false;
+    if (!g.steamID)
+    {
+        return wxString::Format("Steam Link guest %u (no Steam account)", g.player.m_unGuestID);
+    }
+
+    const char* persona = GClientContext()->SteamFriends()->GetFriendPersonaName(g.player.m_playerID);
+    wxString name = wxString::FromUTF8(persona ? persona : "");
+    if (name.IsEmpty() || name == "[unknown]")
+    {
+        placeholder = true;
+        return "Guest (joined with a link)";
+    }
+    return name;
+}
+
 void ControlFrame::Rebuild()
 {
     m_lastRevision = m_handler->RosterRevision();
+    m_waitingForNames = false;
 
     Freeze();
     m_sizer->Clear(true);   // destroy existing row widgets
@@ -93,28 +128,25 @@ void ControlFrame::Rebuild()
         for (size_t i = 0; i < guests.size(); ++i)
         {
             const ConnectedGuest& g = guests[i];
-            CSteamID sid = g.player.m_playerID;
 
             wxPanel* row = new wxPanel(m_container, wxID_ANY);
             row->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
             wxBoxSizer* rs = new wxBoxSizer(wxHORIZONTAL);
 
-            int av = GClientContext()->SteamFriends()->GetSmallFriendAvatar(sid);
+            int av = g.steamID ? GClientContext()->SteamFriends()->GetSmallFriendAvatar(g.player.m_playerID) : 0;
             wxStaticBitmap* img = new wxStaticBitmap(row, wxID_ANY,
                 av ? SteamImageToBitmap(av) : wxNullBitmap, wxDefaultPosition, wxSize(32, 32));
             rs->Add(img, 0, wxALL | wxALIGN_CENTER_VERTICAL, 6);
 
-            wxString name = wxString(GClientContext()->SteamFriends()->GetFriendPersonaName(sid), wxConvUTF8);
-            if (name.IsEmpty())
-            {
-                name = wxString::Format("Guest %llu", (unsigned long long)g.steamID);
-            }
+            bool placeholder = false;
+            wxString name = GuestName(g, placeholder);
+            m_waitingForNames = m_waitingForNames || placeholder;
             wxStaticText* nm = new wxStaticText(row, wxID_ANY, name);
             rs->Add(nm, 1, wxALL | wxALIGN_CENTER_VERTICAL, 6);
 
-            AddToggle(row, rs, "Keyboard",   g.wantKbd,   g.steamID, 0);
-            AddToggle(row, rs, "Mouse",      g.wantMouse, g.steamID, 1);
-            AddToggle(row, rs, "Controller", g.wantCtrl,  g.steamID, 2);
+            AddToggle(row, rs, "Keyboard",   g.wantKbd,   g.key, 0);
+            AddToggle(row, rs, "Mouse",      g.wantMouse, g.key, 1);
+            AddToggle(row, rs, "Controller", g.wantCtrl,  g.key, 2);
 
             row->SetSizer(rs);
             m_sizer->Add(row, 0, wxEXPAND | wxALL, 2);

@@ -1,6 +1,7 @@
 #ifndef STEAMSTUFF_H
 #define STEAMSTUFF_H
 
+#include <string>
 #include <Steamworks.h>
 #include "ClientVTableByName.h"
 
@@ -112,5 +113,9 @@ private:
 
 ClientContext* GClientContext();
 CGameID GetRunningGameID();
+
+// Steam hands out Remote Play links without a scheme ("s.team/p/..."), which chat
+// apps don't turn into clickable links. Adds https:// when no scheme is present.
+std::string ClickableURL(const char* url);
 
 #endif // !STEAMSTUFF_H

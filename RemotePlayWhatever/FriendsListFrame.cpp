@@ -126,17 +126,22 @@ void FriendsListFrame::OnRemotePlayInviteResult(RemotePlayInviteResult_t* invite
         }
         else
         {
+            wxString link = wxString::FromUTF8(ClickableURL(inviteResultCb->m_szConnectURL).c_str());
+            bool copied = false;
+            // Close the clipboard before showing the message box; keeping it open
+            // while the box is up blocks pasting the link anywhere else.
             if(wxTheClipboard->Open())
             {
-               wxTheClipboard->SetData(new wxTextDataObject(inviteResultCb->m_szConnectURL));
-               wxMessageBox(
-                   "Guest invite link created and copied to clipboard",
-                   "Remote Play Whatever",
-                   wxOK | wxICON_INFORMATION
-               );
-               wxTheClipboard->Flush();
-               wxTheClipboard->Close();
+                copied = wxTheClipboard->SetData(new wxTextDataObject(link));
+                wxTheClipboard->Flush();
+                wxTheClipboard->Close();
             }
+            wxMessageBox(
+                (copied ? "Guest invite link copied to the clipboard:\n\n" : "Guest invite link:\n\n") + link +
+                "\n\nSend it to whoever you want to play with. Anyone with the link can join.",
+                "Remote Play Whatever",
+                wxOK | wxICON_INFORMATION
+            );
         }
     }
 }

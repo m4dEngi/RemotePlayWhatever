@@ -168,4 +168,14 @@ CGameID GetRunningGameID()
     return CGameID();
 }
 
+std::string ClickableURL(const char* url)
+{
+    std::string link = url ? url : "";
+    if (!link.empty() && link.find("://") == std::string::npos)
+    {
+        link = "https://" + link;
+    }
+    return link;
+}
+
 

@@ -203,10 +203,8 @@ void RemotePlayInviteHandler::OnRemotePlayInviteResult(RemotePlayInviteResult_t*
     {
         if (inviteResultCb->m_player.m_playerID.IsValid())
         {
-            char* buf = new char[1280];
-            sprintf(buf, "Follow this link to join remote game: %s", inviteResultCb->m_szConnectURL);
-            GClientContext()->SteamFriends()->ReplyToFriendMessage(inviteResultCb->m_player.m_playerID, buf);
-            delete[] buf;
+            std::string msg = "Follow this link to join remote game: " + ClickableURL(inviteResultCb->m_szConnectURL);
+            GClientContext()->SteamFriends()->ReplyToFriendMessage(inviteResultCb->m_player.m_playerID, msg.c_str());
         }
         GClientContext()->RemoteClientManager()->ShowRemotePlayTogetherUI(GetRunningGameID().AppID());
     }

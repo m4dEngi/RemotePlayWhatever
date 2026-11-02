@@ -420,6 +420,16 @@ void RemotePlayInviteHandler::OnRemotePlayStart(RemoteClientStartStreamSession_t
         return;
     }
 
+    // Creating a guest link reserves a slot, and Steam reports that slot as a
+    // stream starting before anyone has joined. The slot carries the link's
+    // placeholder SteamID (account 0, but universe/type set). A real Steam Link
+    // guest without an account reports SteamID 0, and a guest with an account
+    // reports their own SteamID, so only the placeholder is skipped.
+    if (cb->m_player.m_playerID.GetAccountID() == 0 && cb->m_player.m_playerID.ConvertToUint64() != 0)
+    {
+        return;
+    }
+
     uint64 key = GuestKey(cb->m_player);
 
     for (size_t i = 0; i < m_guests.size(); ++i)

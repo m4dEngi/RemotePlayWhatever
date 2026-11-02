@@ -149,6 +149,9 @@ void RemotePlayInviteHandler::GroupTick()
             RemotePlayPlayer_t rppInvitee = { m_pending[i].invitee, guest, m_groupID, 0, 0, 0 };
             rcm->BCreateRemotePlayInviteAndSession(rppInvitee, m_pending[i].appID);
             m_invited.push_back(rppInvitee);
+            clientvt::Log("[rp] invite sent: steam=%llu guest=%u group=%u app=%u\n",
+                          (unsigned long long)rppInvitee.m_playerID.ConvertToUint64(), guest, m_groupID,
+                          (unsigned)m_pending[i].appID);
         }
         m_pending.clear();
     }
@@ -402,6 +405,14 @@ uint64 RemotePlayInviteHandler::GuestKey(const RemotePlayPlayer_t& player)
 // guest id, group id) in the callback, so we can grant control immediately.
 void RemotePlayInviteHandler::OnRemotePlayStart(RemoteClientStartStreamSession_t* cb)
 {
+    clientvt::Log("[rp] stream start: session=%u steam=%llu guest=%u group=%u game=%llu rpt=%d video=%d input=%d"
+                  " | liveGroup=%u state=%d invited=%zu\n",
+                  cb->m_unStreamingSessionID, (unsigned long long)cb->m_player.m_playerID.ConvertToUint64(),
+                  cb->m_player.m_unGuestID, cb->m_player.m_unOverlayPIDGroupID,
+                  (unsigned long long)cb->m_GameID.ToUint64(), (int)cb->m_bRemotePlayTogether,
+                  (int)cb->m_bEnableVideoStreaming, (int)cb->m_bEnableInputStreaming,
+                  m_groupID, (int)m_groupState, m_invited.size());
+
     // Our own stream isn't a guest.
     if (cb->m_player.m_playerID.GetAccountID() != 0 &&
         cb->m_player.m_playerID == GClientContext()->SteamUser()->GetSteamID())
@@ -459,6 +470,11 @@ void RemotePlayInviteHandler::OnRemotePlayInviteResult(RemotePlayInviteResult_t*
 
 void RemotePlayInviteHandler::OnRemotePlayStop(RemoteClientStopStreamSession_t* streamStopCb)
 {
+    clientvt::Log("[rp] stream stop: session=%u steam=%llu guest=%u group=%u\n",
+                  streamStopCb->m_unStreamingSessionID,
+                  (unsigned long long)streamStopCb->m_player.m_playerID.ConvertToUint64(),
+                  streamStopCb->m_player.m_unGuestID, streamStopCb->m_player.m_unOverlayPIDGroupID);
+
     if (streamStopCb->m_player.m_playerID == GClientContext()->SteamUser()->GetSteamID())
     {
         // The whole session is gone; a future invite must create a fresh group.

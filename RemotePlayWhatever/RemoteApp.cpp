@@ -1,4 +1,5 @@
 #include <wx/cmdline.h>
+#include <wx/snglinst.h>
 #include <wx/utils.h>
 #include "RemoteApp.h"
 #include "wxSteamStuff.h"
@@ -19,6 +20,7 @@ static const wxCmdLineEntryDesc cmdLineDesc[] =
 RemoteApp::RemoteApp():
     m_inviteHandler(nullptr),
     m_controlFrame(nullptr),
+    m_singleInstance(nullptr),
     m_oneshot(false),
     m_guestID(1),
     m_nonSteamID(0),
@@ -30,6 +32,33 @@ bool RemoteApp::OnInit()
 {
     if (!wxApp::OnInit())
         return false;
+
+    // Only one window at a time; a second launch brings the open one to the
+    // front. Command-line invites (one-shot mode) can still run alongside it.
+    if (!m_oneshot)
+    {
+        m_singleInstance = new wxSingleInstanceChecker();
+        if (m_singleInstance->Create("RemotePlayWhatever-" + wxGetUserId()) &&
+            m_singleInstance->IsAnotherRunning())
+        {
+            bool activated = false;
+#ifdef __WXMSW__
+            HWND other = ::FindWindowW(nullptr, L"Remote Play Whatever");
+            if (other)
+            {
+                ::ShowWindow(other, SW_RESTORE);
+                activated = ::SetForegroundWindow(other) != FALSE;
+            }
+#endif
+            if (!activated)
+            {
+                wxMessageBox("Remote Play Whatever is already open.", "Remote Play Whatever", wxOK | wxICON_INFORMATION);
+            }
+            delete m_singleInstance;
+            m_singleInstance = nullptr;
+            return false;
+        }
+    }
 
     if (!GClientContext()->Init())
     {
@@ -111,6 +140,9 @@ int RemoteApp::OnExit()
     }
 
     GClientContext()->Shutdown();
+
+    delete m_singleInstance;
+    m_singleInstance = nullptr;
 
     return 0;
 }

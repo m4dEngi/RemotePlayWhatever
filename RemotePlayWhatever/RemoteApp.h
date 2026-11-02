@@ -20,6 +20,7 @@ private:
 };
 
 class ControlFrame;
+class wxSingleInstanceChecker;
 
 class RemoteAppCallbackRunner : public wxTimer
 {
@@ -46,6 +47,7 @@ private:
 
     wxFrame* m_friendsList;
     ControlFrame* m_controlFrame;
+    wxSingleInstanceChecker* m_singleInstance;
     RemoteAppCallbackRunner m_callbackRunner;
 
     std::queue<uint64> m_inviteQue;

@@ -1,5 +1,6 @@
 #include <wx/wx.h>
 #include <wx/clipbrd.h>
+#include <wx/srchctrl.h>
 #include <cstring>
 #include <vector>
 #include "FriendsListFrame.h"
@@ -10,6 +11,7 @@ static const wxColour kReadyGreen(30, 130, 50);
 
 FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
     wxFrame(NULL, wxID_ANY, _("Remote Play Whatever"), wxPoint(50, 50), wxSize(275, 650)),
+    m_search(nullptr),
     m_status(nullptr),
     m_tick(this),
     m_askingGroupFallback(false),
@@ -44,6 +46,13 @@ FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
 
     wxStaticText* flLabel = new wxStaticText(m_friendsListContainer, wxID_ANY, "or invite a friend", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER_HORIZONTAL);
     m_friendsListSizer->Add(flLabel, 0, wxALL | wxEXPAND, 10);
+
+    m_search = new wxSearchCtrl(m_friendsListContainer, wxID_ANY);
+    m_search->SetDescriptiveText("Search friends");
+    m_search->ShowCancelButton(true);
+    m_friendsListSizer->Add(m_search, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 8);
+    m_search->Bind(wxEVT_TEXT, [this](wxCommandEvent&) { ApplyFilter(); });
+    m_search->Bind(wxEVT_SEARCHCTRL_CANCEL_BTN, [this](wxCommandEvent&) { m_search->Clear(); ApplyFilter(); });
 
     int cFriends = GClientContext()->SteamFriends()->GetFriendCount(k_EFriendFlagImmediate);
     for(int i = 0; i < cFriends; ++i)
@@ -220,8 +229,21 @@ void FriendsListFrame::OnPersonaStateChange(PersonaStateChange_t* personaStateCb
     else if(personaStateCb->m_nChangeFlags & k_EPersonaChangeComeOnline)
     {
         AddFreiendPanel(personaStateCb->m_ulSteamID);
+        ApplyFilter();   // a friend who just came online still has to match the search
         Layout();
     }
+}
+
+void FriendsListFrame::ApplyFilter()
+{
+    wxString needle = m_search ? m_search->GetValue().Lower().Trim().Trim(false) : wxString();
+    for (auto it = m_friendPanels.begin(); it != m_friendPanels.end(); ++it)
+    {
+        FriendPanel* panel = it->second;
+        panel->Show(needle.empty() || panel->GetDisplayPersonaName().Lower().Contains(needle));
+    }
+    m_friendsListContainer->FitInside();
+    m_friendsListContainer->Layout();
 }
 
 void FriendsListFrame::OnRemotePlayInviteResult(RemotePlayInviteResult_t* inviteResultCb)
@@ -274,8 +296,8 @@ bool FriendsListFrame::CanSendInvite()
     if (!GClientContext()->SteamUser()->BLoggedOn() || !GetRunningGameID().IsValid())
     {
         wxMessageBox(
-            "Could not detect game running. Start a game first!",
-            "No game runnunig!",
+            "No game is running. Start the game through Steam first, then invite.",
+            "No game running",
             wxOK | wxICON_INFORMATION
         );
         return false;

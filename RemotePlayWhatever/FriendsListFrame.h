@@ -5,6 +5,8 @@
 #include "FriendPanel.h"
 #include "RemotePlayInviteHandler.h"
 
+class wxSearchCtrl;
+
 enum ERPWEvtID
 {
     rpwID_INVITE_GUEST,
@@ -34,7 +36,9 @@ private:
     void OnTick(wxTimerEvent& event);
     void OnClose(wxCloseEvent& event);
     void UpdateStatus();
+    void ApplyFilter();
 
+    wxSearchCtrl* m_search;
     wxStaticText* m_status;
     wxString m_statusShown;
     wxTimer m_tick;

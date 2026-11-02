@@ -75,6 +75,9 @@ int RemoteApp::OnRun()
         GClientContext()->SteamUser()->BLoggedOn()
     )
     {
+        // No one to ask on the command line: if Steam won't create a group,
+        // send anyway like stock RPW did.
+        m_inviteHandler->SetAutoFallback(true);
         QueueInviter qinviter(m_inviteHandler, &m_inviteQue);
         qinviter.SendInvites();
         while(qinviter.Running())

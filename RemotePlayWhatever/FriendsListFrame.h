@@ -31,6 +31,10 @@ private:
 
     void OnFriendPanelClick(wxCommandEvent& event);
     void OnGuestPanelClick(wxCommandEvent& event);
+    void OnTick(wxTimerEvent& event);
+
+    wxTimer m_tick;
+    bool m_askingGroupFallback;
 
     STEAM_CALLBACK(FriendsListFrame, OnRemotePlayInviteResult, RemotePlayInviteResult_t, m_remoteInviteResultCb);
     STEAM_CALLBACK(FriendsListFrame, OnPersonaStateChange, PersonaStateChange_t, m_personaStateCb);

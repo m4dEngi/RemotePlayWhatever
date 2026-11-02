@@ -36,6 +36,14 @@ public:
     // blocks the UI). Cheap no-op when there's nothing pending.
     void GroupTick();
 
+    // If Steam won't create a Remote Play Together group, the invite can only
+    // fall back to stock RPW's default group, where guests can usually watch
+    // but not play. The UI asks the host what to do; command-line (one-shot)
+    // mode sends anyway, like stock RPW did.
+    bool HasGroupFailure() const { return m_groupState == GroupFailed && !m_pending.empty(); }
+    void ResolveGroupFailure(bool sendAnyway);
+    void SetAutoFallback(bool sendAnyway) { m_autoFallback = sendAnyway; }
+
     // Called periodically (from the app callback timer) to re-assert each
     // guest's desired input state so Steam can't silently reset it.
     void GrantControlTick();
@@ -57,7 +65,7 @@ private:
 
     // Async group creation. Stock RPW hardcodes groupID=1 without ever creating
     // a group; we create/settle one first, then fire the queued invite(s).
-    enum EGroupState { GroupNone, GroupWaiting, GroupReady };
+    enum EGroupState { GroupNone, GroupWaiting, GroupReady, GroupFailed };
     struct PendingInvite { CSteamID invitee; AppId_t appID; };
 
     bool m_enabledDesktopStreaming;
@@ -66,8 +74,9 @@ private:
     AppId_t m_nonsteamAppID;
 
     EGroupState m_groupState;
+    AppId_t m_groupAppID;       // the game the current group was set up for
     int m_groupTicks;
-    bool m_calledCreate;
+    bool m_autoFallback;
     std::vector<PendingInvite> m_pending;
 
     std::vector<ConnectedGuest> m_guests;

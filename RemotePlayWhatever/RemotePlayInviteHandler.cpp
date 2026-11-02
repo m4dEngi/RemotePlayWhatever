@@ -1,3 +1,4 @@
+#include <iostream>
 #include "SteamStuff.h"
 #include "RemotePlayInviteHandler.h"
 
@@ -7,8 +8,9 @@ RemotePlayInviteHandler::RemotePlayInviteHandler() :
     m_nonsteamAppID(0),
     m_groupID(1),
     m_groupState(GroupNone),
+    m_groupAppID(0),
     m_groupTicks(0),
-    m_calledCreate(false),
+    m_autoFallback(false),
     m_rosterRevision(0),
     m_remoteStartCb(this, &RemotePlayInviteHandler::OnRemotePlayStart),
     m_remoteStopCb(this, &RemotePlayInviteHandler::OnRemotePlayStop),
@@ -42,6 +44,25 @@ void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
         m_enabledDesktopStreaming = true;
     }
 
+    CRemoteClientManagerByName* rcm = GClientContext()->RemoteClientManager();
+
+    // A group from an earlier invite can be gone by now (everyone left, or the
+    // game was restarted or switched). Check it again instead of inviting into
+    // a group that no longer exists, which leaves guests only able to watch.
+    if (m_groupState == GroupReady || m_groupState == GroupFailed)
+    {
+        uint32 live = rcm->GetLocalRemotePlayTogetherGroupID();
+        if (live && appID == m_groupAppID)
+        {
+            m_groupID = live;
+            m_groupState = GroupReady;
+        }
+        else
+        {
+            m_groupState = GroupNone;
+        }
+    }
+
     PendingInvite pi;
     pi.invitee = invitee;
     pi.appID = appID;
@@ -49,7 +70,7 @@ void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
 
     if (m_groupState == GroupNone)
     {
-        CRemoteClientManagerByName* rcm = GClientContext()->RemoteClientManager();
+        m_groupAppID = appID;
         uint32 g = rcm->GetLocalRemotePlayTogetherGroupID();
         if (g)
         {
@@ -64,10 +85,9 @@ void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
             }
             m_groupState = GroupWaiting;
             m_groupTicks = 0;
-            m_calledCreate = false;
         }
     }
-    // If already Waiting/Ready, the invite just rides along on the existing group.
+    // If Waiting, the invite goes out once the group is ready.
 }
 
 // Drives async group creation and flushes queued invites. Runs every ~200ms.
@@ -85,15 +105,21 @@ void RemotePlayInviteHandler::GroupTick()
         else
         {
             ++m_groupTicks;
-            if (!m_calledCreate && m_groupTicks >= 12)   // ~2.4s settle, then create
+            // Give Steam ~2.4s to set the group up after showing its UI, then
+            // ask it to create one, and ask again at ~5s in case it didn't.
+            if (m_groupTicks == 12 || m_groupTicks == 25)
             {
                 rcm->BCreateRemotePlayGroup();
-                m_calledCreate = true;
             }
-            if (m_groupTicks >= 35)                        // ~7s: give up, fall back
+            if (m_groupTicks >= 50)                        // ~10s and still no group
             {
-                m_groupID = 1;
-                m_groupState = GroupReady;
+                m_groupState = GroupFailed;
+                if (m_autoFallback)
+                {
+                    std::cout << "Warning: Steam didn't create a Remote Play Together group; "
+                                 "inviting anyway (guests may only be able to watch)." << std::endl;
+                    ResolveGroupFailure(true);
+                }
             }
         }
     }
@@ -123,6 +149,26 @@ void RemotePlayInviteHandler::CancelInvite(CSteamID invitee, uint32 guestID)
     {
         RemotePlayPlayer_t rppInvitee = { invitee, guestID, m_groupID, 0, 0, 0 };
         GClientContext()->RemoteClientManager()->CancelRemotePlayInviteAndSession(rppInvitee);
+    }
+}
+
+void RemotePlayInviteHandler::ResolveGroupFailure(bool sendAnyway)
+{
+    if (m_groupState != GroupFailed)
+    {
+        return;
+    }
+
+    if (sendAnyway)
+    {
+        // Stock RPW behaviour: invite with the default group id.
+        m_groupID = 1;
+        m_groupState = GroupReady;
+    }
+    else
+    {
+        m_pending.clear();
+        m_groupState = GroupNone;
     }
 }
 
@@ -244,7 +290,6 @@ void RemotePlayInviteHandler::OnRemotePlayStop(RemoteClientStopStreamSession_t* 
         ++m_rosterRevision;
         // The session is gone; a future invite must create a fresh group.
         m_groupState = GroupNone;
-        m_calledCreate = false;
         m_pending.clear();
         return;
     }

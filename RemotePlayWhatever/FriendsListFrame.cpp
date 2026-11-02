@@ -7,6 +7,8 @@
 
 FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
     wxFrame(NULL, wxID_ANY, _("Remote Play Whatever"), wxPoint(50, 50), wxSize(275, 650)),
+    m_tick(this),
+    m_askingGroupFallback(false),
     m_remoteInviteResultCb(this, &FriendsListFrame::OnRemotePlayInviteResult),
     m_personaStateCb(this, &FriendsListFrame::OnPersonaStateChange)
 {
@@ -50,6 +52,49 @@ FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
 
     Bind(BTN_PANEL_LEFT_CLICK, &FriendsListFrame::OnFriendPanelClick, this, rpwID_INVITE_FRIEND);
     Bind(BTN_PANEL_LEFT_CLICK, &FriendsListFrame::OnGuestPanelClick, this, rpwID_INVITE_GUEST);
+    Bind(wxEVT_TIMER, &FriendsListFrame::OnTick, this);
+    m_tick.Start(500);
+}
+
+void FriendsListFrame::OnTick(wxTimerEvent&)
+{
+    // Timers keep firing while a message box is open, so don't ask twice.
+    if (m_pRemoteInvite->HasGroupFailure() && !m_askingGroupFallback)
+    {
+        m_askingGroupFallback = true;
+        int answer = wxMessageBox(
+            "Steam didn't set up a Remote Play Together group for this game, so your "
+            "guest might only be able to watch, not play.\n\n"
+            "Send the invite anyway?\n\n"
+            "If they can't play, quit the game, start it again through Steam, and send a new invite.",
+            "Remote Play Whatever",
+            wxYES_NO | wxICON_WARNING,
+            this
+        );
+        m_pRemoteInvite->ResolveGroupFailure(answer == wxYES);
+        m_askingGroupFallback = false;
+    }
+}
+
+static wxString DescribeLaunchResult(ERemoteClientLaunchResult result)
+{
+    switch (result)
+    {
+    case k_ERemoteClientLaunchResultTimeout:
+    case k_ERemoteClientLaunchResultStreamTimeout:      return "Steam timed out while starting the session.";
+    case k_ERemoteClientLaunchResultOtherGameRunning:   return "Another game is already being shared.";
+    case k_ERemoteClientLaunchResultAccessDenied:       return "Steam refused the request.";
+    case k_ERemoteClientLaunchResultNetworkError:       return "There was a network error.";
+    case k_ERemoteClientLaunchResultScreenLocked:       return "This PC's screen is locked.";
+    case k_ERemoteClientLaunchResultUnsupported:        return "Steam says this game can't be shared.";
+    case k_ERemoteClientLaunchResultDisabledLocal:      return "Remote Play is turned off in this PC's Steam settings.";
+    case k_ERemoteClientLaunchResultDisabledRemote:     return "Remote Play is turned off on your friend's side.";
+    case k_ERemoteClientLaunchResultBroadcasting:       return "Steam can't share the game while you're broadcasting.";
+    case k_ERemoteClientLaunchResultBusy:               return "Steam is busy with another stream.";
+    case k_ERemoteClientLaunchResultDriversNotInstalled:return "Steam's streaming drivers aren't installed.";
+    case k_ERemoteClientLaunchResultCanceled:           return "The invite was canceled.";
+    default:                                            return "Steam couldn't start the session.";
+    }
 }
 
 void FriendsListFrame::AddFreiendPanel(CSteamID friendID)
@@ -109,7 +154,8 @@ void FriendsListFrame::OnRemotePlayInviteResult(RemotePlayInviteResult_t* invite
     if (inviteResultCb->m_eResult != k_ERemoteClientLaunchResultOK)
     {
         wxMessageBox(
-            wxString::Format("Could not create remote play session! (Result:%d)", inviteResultCb->m_eResult),
+            "Couldn't start Remote Play. " + DescribeLaunchResult(inviteResultCb->m_eResult) +
+            wxString::Format("\n\n(Steam result %d)", (int)inviteResultCb->m_eResult),
             "Remote Play Whatever",
             wxOK | wxICON_ERROR
         );
@@ -118,8 +164,10 @@ void FriendsListFrame::OnRemotePlayInviteResult(RemotePlayInviteResult_t* invite
     {
         if(inviteResultCb->m_player.m_playerID.IsValid())
         {
+            const char* persona = GClientContext()->SteamFriends()->GetFriendPersonaName(inviteResultCb->m_player.m_playerID);
             wxMessageBox(
-                "Invite sent",
+                "Invite sent to " + wxString::FromUTF8(persona && *persona ? persona : "your friend") +
+                ". They'll get the link in Steam chat.",
                 "Remote Play Whatever",
                 wxOK | wxICON_INFORMATION
             );

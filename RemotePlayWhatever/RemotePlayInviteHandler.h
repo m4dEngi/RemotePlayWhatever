@@ -2,6 +2,7 @@
 #define REMOTEPLAYINVITEHANDLER_H
 
 #include <Steamworks.h>
+#include <string>
 #include <vector>
 
 // A guest that has connected to our Remote Play Together session. We remember
@@ -12,6 +13,7 @@ struct ConnectedGuest
     RemotePlayPlayer_t player;
     uint64 key;         // unique per guest, see RemotePlayInviteHandler::GuestKey
     uint64 steamID;     // 0 for Steam Link guests who joined without a Steam account
+    uint32 sessionID;   // Steam's streaming session for this guest
     bool wantKbd;
     bool wantMouse;
     bool wantCtrl;
@@ -54,6 +56,20 @@ public:
     // guest's desired input state so Steam can't silently reset it.
     void GrantControlTick();
 
+    // --- Session ------------------------------------------------------------
+    // True while invites are out, guests are connected, or the whole screen is
+    // being shared for a non-Steam game.
+    bool IsSessionActive() const;
+    bool IsSharingDesktop() const { return m_enabledDesktopStreaming; }
+    // Disconnect everyone, cancel unanswered invites (so guest links stop
+    // working) and stop sharing the screen. Safe to call when nothing is active.
+    void EndSession();
+    // GUI timer tick (~200ms): when the game the session is for closes, end the
+    // session, so guests of a non-Steam game don't keep seeing the desktop.
+    void SessionTick();
+    // One-off message for the UI (e.g. why a session ended), cleared on read.
+    std::string TakeNotice();
+
     // Roster access + per-guest control, driven by the control window UI.
     const std::vector<ConnectedGuest>& Guests() const { return m_guests; }
     void SetGuestInput(uint64 key, bool kbd, bool mouse, bool ctrl);
@@ -93,9 +109,16 @@ private:
     int m_groupTicks;
     bool m_autoFallback;
     std::vector<PendingInvite> m_pending;
+    std::vector<RemotePlayPlayer_t> m_invited;  // invites sent this session
+
+    uint64 m_sessionGame;       // game the current session is for (CGameID)
+    int m_sessionGameGoneTicks;
+    std::string m_notice;
 
     std::vector<ConnectedGuest> m_guests;
     uint32 m_rosterRevision;
+
+    void ResetSession();
 
     STEAM_CALLBACK(RemotePlayInviteHandler, OnRemotePlayStart, RemoteClientStartStreamSession_t, m_remoteStartCb);
     STEAM_CALLBACK(RemotePlayInviteHandler, OnRemotePlayStop, RemoteClientStopStreamSession_t, m_remoteStopCb);

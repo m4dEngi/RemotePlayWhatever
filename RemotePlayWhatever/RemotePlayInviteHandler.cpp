@@ -11,6 +11,8 @@ RemotePlayInviteHandler::RemotePlayInviteHandler() :
     m_groupAppID(0),
     m_groupTicks(0),
     m_autoFallback(false),
+    m_sessionGame(0),
+    m_sessionGameGoneTicks(0),
     m_rosterRevision(0),
     m_remoteStartCb(this, &RemotePlayInviteHandler::OnRemotePlayStart),
     m_remoteStopCb(this, &RemotePlayInviteHandler::OnRemotePlayStop),
@@ -37,6 +39,14 @@ void RemotePlayInviteHandler::SendInvite(CSteamID invitee)
 
     bool desktop = !(gameID.IsSteamApp() && gameID.AppID() != m_nonsteamAppID);
     AppId_t appID = desktop ? m_nonsteamAppID : gameID.AppID();
+
+    // Leftovers from a session for a game that has since closed or changed.
+    if (m_sessionGame && m_sessionGame != gameID.ToUint64())
+    {
+        EndSession();
+    }
+    m_sessionGame = gameID.ToUint64();
+    m_sessionGameGoneTicks = 0;
 
     if (desktop && !m_enabledDesktopStreaming)
     {
@@ -138,6 +148,7 @@ void RemotePlayInviteHandler::GroupTick()
 
             RemotePlayPlayer_t rppInvitee = { m_pending[i].invitee, guest, m_groupID, 0, 0, 0 };
             rcm->BCreateRemotePlayInviteAndSession(rppInvitee, m_pending[i].appID);
+            m_invited.push_back(rppInvitee);
         }
         m_pending.clear();
     }
@@ -150,6 +161,86 @@ void RemotePlayInviteHandler::CancelInvite(CSteamID invitee, uint32 guestID)
         RemotePlayPlayer_t rppInvitee = { invitee, guestID, m_groupID, 0, 0, 0 };
         GClientContext()->RemoteClientManager()->CancelRemotePlayInviteAndSession(rppInvitee);
     }
+}
+
+bool RemotePlayInviteHandler::IsSessionActive() const
+{
+    return !m_guests.empty() || !m_invited.empty() || !m_pending.empty() ||
+           m_enabledDesktopStreaming || m_groupState == GroupWaiting;
+}
+
+void RemotePlayInviteHandler::EndSession()
+{
+    CRemoteClientManagerByName* rcm = GClientContext()->RemoteClientManager();
+
+    // Connected guests: end their streams and their places in the session.
+    for (size_t i = 0; i < m_guests.size(); ++i)
+    {
+        if (m_guests[i].sessionID)
+        {
+            rcm->StopStreamingSession(m_guests[i].sessionID);
+        }
+        rcm->CancelRemotePlayInviteAndSession(m_guests[i].player);
+    }
+
+    // Invites nobody has used yet, including guest links.
+    for (size_t i = 0; i < m_invited.size(); ++i)
+    {
+        rcm->CancelRemotePlayInviteAndSession(m_invited[i]);
+    }
+
+    if (m_enabledDesktopStreaming || rcm->BStreamingDesktopToRemotePlayTogetherEnabled())
+    {
+        rcm->SetStreamingDesktopToRemotePlayTogetherEnabled(false);
+    }
+
+    ResetSession();
+}
+
+void RemotePlayInviteHandler::ResetSession()
+{
+    m_enabledDesktopStreaming = false;
+    m_sessionGame = 0;
+    m_sessionGameGoneTicks = 0;
+    m_remoteGuestID = 1;
+    m_groupState = GroupNone;
+    m_pending.clear();
+    m_invited.clear();
+    m_guests.clear();
+    ++m_rosterRevision;
+}
+
+void RemotePlayInviteHandler::SessionTick()
+{
+    if (!m_sessionGame || !IsSessionActive())
+    {
+        return;
+    }
+
+    CGameID running = GetRunningGameID();
+    if (running.IsValid() && running.ToUint64() == m_sessionGame)
+    {
+        m_sessionGameGoneTicks = 0;
+        return;
+    }
+
+    // Give it ~3s in case Steam briefly reports no game (e.g. while an
+    // emulator recreates its window).
+    if (++m_sessionGameGoneTicks >= 15)
+    {
+        bool desktop = m_enabledDesktopStreaming;
+        EndSession();
+        m_notice = desktop ?
+            "The game closed, so screen sharing stopped and everyone was disconnected." :
+            "The game closed, so the Remote Play session ended.";
+    }
+}
+
+std::string RemotePlayInviteHandler::TakeNotice()
+{
+    std::string notice;
+    notice.swap(m_notice);
+    return notice;
 }
 
 void RemotePlayInviteHandler::ResolveGroupFailure(bool sendAnyway)
@@ -169,6 +260,11 @@ void RemotePlayInviteHandler::ResolveGroupFailure(bool sendAnyway)
     {
         m_pending.clear();
         m_groupState = GroupNone;
+        // Nothing was sent, so don't leave the screen shared for nobody.
+        if (m_guests.empty() && m_invited.empty())
+        {
+            EndSession();
+        }
     }
 }
 
@@ -320,6 +416,7 @@ void RemotePlayInviteHandler::OnRemotePlayStart(RemoteClientStartStreamSession_t
         if (m_guests[i].key == key)
         {
             m_guests[i].player = cb->m_player;  // refresh with latest struct
+            m_guests[i].sessionID = cb->m_unStreamingSessionID;
             ApplyGuest(m_guests[i]);
             return;
         }
@@ -329,6 +426,7 @@ void RemotePlayInviteHandler::OnRemotePlayStart(RemoteClientStartStreamSession_t
     g.player = cb->m_player;
     g.key = key;
     g.steamID = cb->m_player.m_playerID.GetAccountID() != 0 ? cb->m_player.m_playerID.ConvertToUint64() : 0;
+    g.sessionID = cb->m_unStreamingSessionID;
     g.wantKbd = true;
     g.wantMouse = true;
     g.wantCtrl = true;              // default: give a new guest full control
@@ -363,13 +461,9 @@ void RemotePlayInviteHandler::OnRemotePlayStop(RemoteClientStopStreamSession_t* 
 {
     if (streamStopCb->m_player.m_playerID == GClientContext()->SteamUser()->GetSteamID())
     {
+        // The whole session is gone; a future invite must create a fresh group.
         GClientContext()->RemoteClientManager()->SetStreamingDesktopToRemotePlayTogetherEnabled(false);
-        m_remoteGuestID = 1;
-        m_guests.clear();
-        ++m_rosterRevision;
-        // The session is gone; a future invite must create a fresh group.
-        m_groupState = GroupNone;
-        m_pending.clear();
+        ResetSession();
         return;
     }
 

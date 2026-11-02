@@ -224,6 +224,8 @@ void RemoteAppCallbackRunner::Notify()
     {
         // Advance async group creation / flush queued invites every tick.
         app->GetInviteHandler()->GroupTick();
+        // End the session if the shared game has closed.
+        app->GetInviteHandler()->SessionTick();
 
         // Re-assert guest control roughly every 2s (10 ticks @ 200ms) so Steam
         // can't silently reset the per-user input we granted.

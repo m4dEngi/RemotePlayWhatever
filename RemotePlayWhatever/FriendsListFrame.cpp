@@ -1,6 +1,7 @@
 #include <wx/wx.h>
 #include <wx/clipbrd.h>
 #include <wx/srchctrl.h>
+#include <wx/time.h>
 #include <cstring>
 #include <vector>
 #include "FriendsListFrame.h"
@@ -8,11 +9,14 @@
 #include "GameInfo.h"
 
 static const wxColour kReadyGreen(30, 130, 50);
+static const wxColour kNoticeOrange(190, 100, 0);
 
 FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
     wxFrame(NULL, wxID_ANY, _("Remote Play Whatever"), wxPoint(50, 50), wxSize(275, 650)),
     m_search(nullptr),
     m_status(nullptr),
+    m_endButton(nullptr),
+    m_noticeUntil(0),
     m_tick(this),
     m_askingGroupFallback(false),
     m_remoteInviteResultCb(this, &FriendsListFrame::OnRemotePlayInviteResult),
@@ -34,6 +38,11 @@ FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
     m_status = new wxStaticText(statusPanel, wxID_ANY, wxEmptyString);
     m_status->SetFont(m_status->GetFont().Bold());
     statusSizer->Add(m_status, 0, wxALL | wxEXPAND, 10);
+    m_endButton = new wxButton(statusPanel, wxID_ANY, "End session");
+    m_endButton->SetToolTip("Disconnect everyone, cancel unused invites and guest links, and stop sharing your screen.");
+    m_endButton->Bind(wxEVT_BUTTON, &FriendsListFrame::OnEndSession, this);
+    m_endButton->Hide();
+    statusSizer->Add(m_endButton, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 10);
     statusPanel->SetSizer(statusSizer);
     frameSizer->Add(statusPanel, 0, wxEXPAND | wxBOTTOM, 1);
 
@@ -103,39 +112,100 @@ void FriendsListFrame::OnClose(wxCloseEvent& event)
 
 void FriendsListFrame::UpdateStatus()
 {
+    wxString notice = wxString::FromUTF8(m_pRemoteInvite->TakeNotice().c_str());
+    if (!notice.empty())
+    {
+        m_notice = notice;
+        m_noticeUntil = wxGetLocalTimeMillis() + 15000;
+    }
+
     wxString text;
     wxColour colour = wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT);
+    bool session = m_pRemoteInvite->IsSessionActive();
 
-    if (!GClientContext()->SteamUser()->BLoggedOn())
+    if (!m_notice.empty() && wxGetLocalTimeMillis() < m_noticeUntil && !session)
+    {
+        text = m_notice;
+        colour = kNoticeOrange;
+    }
+    else if (!GClientContext()->SteamUser()->BLoggedOn())
     {
         text = "Steam isn't signed in.";
     }
     else
     {
+        m_notice.clear();
         CGameID game = GetRunningGameID();
-        if (!game.IsValid())
+        bool nonSteam = game.IsValid() &&
+                        !(game.IsSteamApp() && game.AppID() != m_pRemoteInvite->GetNonSteamAppID());
+        wxString name = game.IsValid() ?
+            GetGameName(game, GClientContext()->SteamUser()->GetSteamID().GetAccountID()) : wxString();
+        if (name.empty())
+        {
+            name = nonSteam ? "a non-Steam game" : "your game";
+        }
+
+        if (session)
+        {
+            unsigned guests = (unsigned)m_pRemoteInvite->Guests().size();
+            text = "Sharing " + name + ": ";
+            text += guests == 0 ? wxString("waiting for guests to join.") :
+                    guests == 1 ? wxString("1 guest connected.") :
+                    wxString::Format("%u guests connected.", guests);
+            if (m_pRemoteInvite->IsSharingDesktop())
+            {
+                text += " Guests can see your whole screen.";
+            }
+            colour = kReadyGreen;
+        }
+        else if (!game.IsValid())
         {
             text = "No game running. Start a game through Steam, then invite someone.";
         }
-        else if (game.IsSteamApp() && game.AppID() != m_pRemoteInvite->GetNonSteamAppID())
-        {
-            text = "Ready to share: " + GetSteamAppName(game.AppID());
-            colour = kReadyGreen;
-        }
         else
         {
-            text = "Ready to share a non-Steam game (your whole screen is shared).";
+            text = "Ready to share: " + name;
+            if (nonSteam)
+            {
+                text += " (non-Steam game, so your whole screen will be shared)";
+            }
             colour = kReadyGreen;
         }
     }
 
+    bool relayout = false;
     if (text != m_statusShown)
     {
         m_statusShown = text;
         m_status->SetLabel(text);
         m_status->SetForegroundColour(colour);
         m_status->Wrap(FromDIP(235));
+        relayout = true;
+    }
+    if (m_endButton->IsShown() != session)
+    {
+        m_endButton->Show(session);
+        relayout = true;
+    }
+    if (relayout)
+    {
+        m_status->GetParent()->Layout();
         Layout();
+    }
+}
+
+void FriendsListFrame::OnEndSession(wxCommandEvent&)
+{
+    int answer = wxMessageBox(
+        "Disconnect everyone and stop sharing?\n\nUnused invites and guest links will stop working too.",
+        "Remote Play Whatever",
+        wxYES_NO | wxICON_QUESTION,
+        this
+    );
+    if (answer == wxYES)
+    {
+        m_pRemoteInvite->EndSession();
+        UpdateStatus();
     }
 }
 

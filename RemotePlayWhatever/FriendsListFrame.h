@@ -35,12 +35,16 @@ private:
     void OnGuestPanelClick(wxCommandEvent& event);
     void OnTick(wxTimerEvent& event);
     void OnClose(wxCloseEvent& event);
+    void OnEndSession(wxCommandEvent& event);
     void UpdateStatus();
     void ApplyFilter();
 
     wxSearchCtrl* m_search;
     wxStaticText* m_status;
+    wxButton* m_endButton;
     wxString m_statusShown;
+    wxString m_notice;
+    wxLongLong m_noticeUntil;
     wxTimer m_tick;
     bool m_askingGroupFallback;
 

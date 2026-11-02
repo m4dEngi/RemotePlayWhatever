@@ -210,10 +210,87 @@ void RemotePlayInviteHandler::SetGuestInput(uint64 key, bool kbd, bool mouse, bo
             m_guests[i].wantKbd = kbd;
             m_guests[i].wantMouse = mouse;
             m_guests[i].wantCtrl = ctrl;
+            m_guests[i].hasSaved = false;
             ApplyGuest(m_guests[i]);
+            ++m_rosterRevision;
             return;
         }
     }
+}
+
+static bool& Peripheral(ConnectedGuest& g, int which)
+{
+    if (which == 0) return g.wantKbd;
+    if (which == 1) return g.wantMouse;
+    return g.wantCtrl;
+}
+
+bool RemotePlayInviteHandler::AllGuestsHave(int which) const
+{
+    if (m_guests.empty())
+    {
+        return false;
+    }
+    for (size_t i = 0; i < m_guests.size(); ++i)
+    {
+        const ConnectedGuest& g = m_guests[i];
+        bool on = which == 0 ? g.wantKbd : which == 1 ? g.wantMouse : g.wantCtrl;
+        if (!on)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+void RemotePlayInviteHandler::SetAllGuestsInput(int which, bool on)
+{
+    for (size_t i = 0; i < m_guests.size(); ++i)
+    {
+        Peripheral(m_guests[i], which) = on;
+        m_guests[i].hasSaved = false;
+        ApplyGuest(m_guests[i]);
+    }
+    ++m_rosterRevision;
+}
+
+void RemotePlayInviteHandler::TakeAllControl()
+{
+    for (size_t i = 0; i < m_guests.size(); ++i)
+    {
+        ConnectedGuest& g = m_guests[i];
+        if (!g.hasSaved)
+        {
+            g.savedKbd = g.wantKbd;
+            g.savedMouse = g.wantMouse;
+            g.savedCtrl = g.wantCtrl;
+            g.hasSaved = true;
+        }
+        g.wantKbd = g.wantMouse = g.wantCtrl = false;
+        ApplyGuest(g);
+    }
+    ++m_rosterRevision;
+}
+
+void RemotePlayInviteHandler::GiveBackControl()
+{
+    for (size_t i = 0; i < m_guests.size(); ++i)
+    {
+        ConnectedGuest& g = m_guests[i];
+        if (g.hasSaved)
+        {
+            g.wantKbd = g.savedKbd;
+            g.wantMouse = g.savedMouse;
+            g.wantCtrl = g.savedCtrl;
+            g.hasSaved = false;
+        }
+        else
+        {
+            g.wantKbd = g.wantMouse = g.wantCtrl = true;
+        }
+        ApplyGuest(g);
+    }
+    ++m_rosterRevision;
 }
 
 uint64 RemotePlayInviteHandler::GuestKey(const RemotePlayPlayer_t& player)
@@ -255,6 +332,8 @@ void RemotePlayInviteHandler::OnRemotePlayStart(RemoteClientStartStreamSession_t
     g.wantKbd = true;
     g.wantMouse = true;
     g.wantCtrl = true;              // default: give a new guest full control
+    g.hasSaved = false;
+    g.savedKbd = g.savedMouse = g.savedCtrl = false;
     m_guests.push_back(g);
     ++m_rosterRevision;
 

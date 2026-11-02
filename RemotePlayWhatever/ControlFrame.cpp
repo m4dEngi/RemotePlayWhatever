@@ -1,14 +1,31 @@
 #include "ControlFrame.h"
 #include "wxSteamStuff.h"
+#ifdef __WXMSW__
+#include <wx/msw/wrapwin.h>
+#endif
 
 static const wxColour kGreen(46, 160, 67);
 static const wxColour kRed(180, 60, 60);
 
+// Key used by the "Everyone" row's toggles; never a real guest key.
+static const uint64 kEveryone = 0;
+
+enum
+{
+    kHotKeyKeyboard = 0xB001,
+    kHotKeyMouse,
+    kHotKeyController,
+    kHotKeyTakeControl,
+    kHotKeyGiveBack,
+};
+
 ControlFrame::ControlFrame(RemotePlayInviteHandler* handler) :
     wxFrame(NULL, wxID_ANY, "Remote Play Control", wxDefaultPosition, wxSize(420, 460)),
     m_handler(handler),
+    m_hotkeyHint(nullptr),
     m_timer(this),
     m_lastRevision((uint32)-1),
+    m_lastGuestCount(0),
     m_waitingForNames(false)
 {
     m_container = new wxScrolledWindow(this, wxID_ANY);
@@ -18,12 +35,102 @@ ControlFrame::ControlFrame(RemotePlayInviteHandler* handler) :
 
     wxBoxSizer* frameSizer = new wxBoxSizer(wxVERTICAL);
     frameSizer->Add(m_container, 1, wxEXPAND);
+    m_hotkeyHint = new wxStaticText(this, wxID_ANY, wxEmptyString);
+    m_hotkeyHint->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
+    frameSizer->Add(m_hotkeyHint, 0, wxALL | wxEXPAND, 8);
     SetSizer(frameSizer);
 
+    RegisterHotKeys();
+
     Bind(wxEVT_TIMER, &ControlFrame::OnPoll, this);
+    Bind(wxEVT_CLOSE_WINDOW, &ControlFrame::OnClose, this);
     m_timer.Start(500);
 
     Rebuild();
+}
+
+ControlFrame::~ControlFrame()
+{
+#if wxUSE_HOTKEY
+    for (size_t i = 0; i < m_hotkeys.size(); ++i)
+    {
+        UnregisterHotKey(m_hotkeys[i]);
+    }
+#endif
+}
+
+void ControlFrame::RegisterHotKeys()
+{
+    wxString hint;
+#if wxUSE_HOTKEY
+    struct HotKey { int id; int key; const char* what; };
+    static const HotKey keys[] =
+    {
+        { kHotKeyKeyboard,    'K', "K keyboard on/off" },
+        { kHotKeyMouse,       'M', "M mouse on/off" },
+        { kHotKeyController,  'C', "C controller on/off" },
+        { kHotKeyTakeControl, 'D', "D take all control" },
+        { kHotKeyGiveBack,    'G', "G give it back" },
+    };
+
+    // A key combo another app already owns just isn't offered.
+    for (const HotKey& k : keys)
+    {
+        if (RegisterHotKey(k.id, wxMOD_CONTROL | wxMOD_ALT, k.key))
+        {
+            m_hotkeys.push_back(k.id);
+            hint += hint.empty() ? "" : ", ";
+            hint += k.what;
+        }
+    }
+    Bind(wxEVT_HOTKEY, &ControlFrame::OnHotKey, this);
+
+    if (!hint.empty())
+    {
+        hint = "Shortcuts for everyone that work while you're in the game (Ctrl+Alt + key): " + hint + ".";
+    }
+#endif
+    m_hotkeyHint->SetLabel(hint);
+    m_hotkeyHint->Wrap(FromDIP(390));
+    m_hotkeyHint->Show(!hint.empty());
+}
+
+void ControlFrame::OnHotKey(wxKeyEvent& evt)
+{
+    if (m_handler->Guests().empty())
+    {
+        return;
+    }
+
+    bool gave = true;
+    switch (evt.GetId())
+    {
+    case kHotKeyKeyboard:    gave = !m_handler->AllGuestsHave(0); m_handler->SetAllGuestsInput(0, gave); break;
+    case kHotKeyMouse:       gave = !m_handler->AllGuestsHave(1); m_handler->SetAllGuestsInput(1, gave); break;
+    case kHotKeyController:  gave = !m_handler->AllGuestsHave(2); m_handler->SetAllGuestsInput(2, gave); break;
+    case kHotKeyTakeControl: gave = false; m_handler->TakeAllControl(); break;
+    case kHotKeyGiveBack:    gave = true;  m_handler->GiveBackControl(); break;
+    default:                 return;
+    }
+
+#ifdef __WXMSW__
+    // The window is usually hidden behind the game, so confirm with a sound.
+    ::MessageBeep(gave ? MB_OK : MB_ICONEXCLAMATION);
+#endif
+    Rebuild();
+}
+
+void ControlFrame::OnClose(wxCloseEvent& evt)
+{
+    // Closing only hides the window; it comes back when the next guest joins.
+    // (Quitting the app destroys it directly from the main window.)
+    if (evt.CanVeto())
+    {
+        evt.Veto();
+        Hide();
+        return;
+    }
+    evt.Skip();
 }
 
 void ControlFrame::OnPoll(wxTimerEvent&)
@@ -48,16 +155,20 @@ void ControlFrame::OnPoll(wxTimerEvent&)
         Rebuild();
     }
 
-    // Pop up automatically the moment a guest connects.
-    if (!m_handler->Guests().empty() && !IsShown())
+    // Pop up when a new guest joins, without taking focus away from the game
+    // (which can minimize a fullscreen game). Flash the taskbar button instead.
+    size_t count = m_handler->Guests().size();
+    if (count > m_lastGuestCount && !IsShown())
     {
-        Show();
-        Raise();
+        ShowWithoutActivating();
+        RequestUserAttention(wxUSER_ATTENTION_INFO);
     }
+    m_lastGuestCount = count;
 }
 
 // A colored toggle: green = the guest has this peripheral, red = revoked.
-// Clicking flips just this one peripheral for this one guest.
+// Clicking flips just this one peripheral for this one guest, or for everyone
+// on the "Everyone" row.
 void ControlFrame::AddToggle(wxWindow* parent, wxSizer* sizer, const wxString& label,
                              bool on, uint64 guestKey, int which)
 {
@@ -69,22 +180,30 @@ void ControlFrame::AddToggle(wxWindow* parent, wxSizer* sizer, const wxString& l
 
     btn->Bind(wxEVT_BUTTON, [this, guestKey, which](wxCommandEvent&)
     {
-        const std::vector<ConnectedGuest>& guests = m_handler->Guests();
-        for (size_t i = 0; i < guests.size(); ++i)
+        if (guestKey == kEveryone)
         {
-            if (guests[i].key == guestKey)
+            m_handler->SetAllGuestsInput(which, !m_handler->AllGuestsHave(which));
+        }
+        else
+        {
+            const std::vector<ConnectedGuest>& guests = m_handler->Guests();
+            for (size_t i = 0; i < guests.size(); ++i)
             {
-                bool k = guests[i].wantKbd;
-                bool m = guests[i].wantMouse;
-                bool c = guests[i].wantCtrl;
-                if (which == 0)      k = !k;
-                else if (which == 1) m = !m;
-                else                 c = !c;
-                m_handler->SetGuestInput(guestKey, k, m, c);
-                break;
+                if (guests[i].key == guestKey)
+                {
+                    bool k = guests[i].wantKbd;
+                    bool m = guests[i].wantMouse;
+                    bool c = guests[i].wantCtrl;
+                    if (which == 0)      k = !k;
+                    else if (which == 1) m = !m;
+                    else                 c = !c;
+                    m_handler->SetGuestInput(guestKey, k, m, c);
+                    break;
+                }
             }
         }
-        Rebuild();   // refresh button colors
+        // Rebuilding destroys this button, so wait until its click is handled.
+        CallAfter([this]() { Rebuild(); });
     });
 }
 
@@ -125,6 +244,23 @@ void ControlFrame::Rebuild()
     }
     else
     {
+        // With several guests, an "Everyone" row flips a peripheral for all of them.
+        if (guests.size() >= 2)
+        {
+            wxPanel* row = new wxPanel(m_container, wxID_ANY);
+            row->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+            wxBoxSizer* rs = new wxBoxSizer(wxHORIZONTAL);
+            rs->AddSpacer(44);
+            wxStaticText* nm = new wxStaticText(row, wxID_ANY, "Everyone");
+            nm->SetFont(nm->GetFont().Bold());
+            rs->Add(nm, 1, wxALL | wxALIGN_CENTER_VERTICAL, 6);
+            AddToggle(row, rs, "Keyboard",   m_handler->AllGuestsHave(0), kEveryone, 0);
+            AddToggle(row, rs, "Mouse",      m_handler->AllGuestsHave(1), kEveryone, 1);
+            AddToggle(row, rs, "Controller", m_handler->AllGuestsHave(2), kEveryone, 2);
+            row->SetSizer(rs);
+            m_sizer->Add(row, 0, wxEXPAND | wxALL, 2);
+        }
+
         for (size_t i = 0; i < guests.size(); ++i)
         {
             const ConnectedGuest& g = guests[i];

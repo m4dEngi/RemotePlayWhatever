@@ -15,6 +15,12 @@ struct ConnectedGuest
     bool wantKbd;
     bool wantMouse;
     bool wantCtrl;
+    // What the guest had before the host took all control (Ctrl+Alt+D), so
+    // giving it back (Ctrl+Alt+G) restores exactly that.
+    bool hasSaved;
+    bool savedKbd;
+    bool savedMouse;
+    bool savedCtrl;
 };
 
 class RemotePlayInviteHandler
@@ -52,11 +58,20 @@ public:
     const std::vector<ConnectedGuest>& Guests() const { return m_guests; }
     void SetGuestInput(uint64 key, bool kbd, bool mouse, bool ctrl);
 
+    // Everyone at once (control window "Everyone" row and hotkeys).
+    // which: 0 = keyboard, 1 = mouse, 2 = controller.
+    bool AllGuestsHave(int which) const;
+    void SetAllGuestsInput(int which, bool on);
+    // Take every peripheral from every guest, remembering what each one had,
+    // and give it back later (everything, if nothing was remembered).
+    void TakeAllControl();
+    void GiveBackControl();
+
     // Guests with a Steam account are identified by their SteamID. Steam Link
     // guests without an account all report SteamID 0, so they're identified by
     // their guest slot instead (a value that can never be a real SteamID).
     static uint64 GuestKey(const RemotePlayPlayer_t& player);
-    // Bumped whenever the roster changes (guest joins/leaves) so the UI can
+    // Bumped whenever the roster or anyone's control changes, so the UI can
     // tell when to rebuild itself.
     uint32 RosterRevision() const { return m_rosterRevision; }
 

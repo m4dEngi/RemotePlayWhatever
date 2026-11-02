@@ -1,6 +1,7 @@
 #include <wx/wx.h>
 #include <wx/clipbrd.h>
 #include <cstring>
+#include <vector>
 #include "FriendsListFrame.h"
 #include "FriendPanel.h"
 #include "GameInfo.h"
@@ -66,8 +67,29 @@ FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
     Bind(BTN_PANEL_LEFT_CLICK, &FriendsListFrame::OnFriendPanelClick, this, rpwID_INVITE_FRIEND);
     Bind(BTN_PANEL_LEFT_CLICK, &FriendsListFrame::OnGuestPanelClick, this, rpwID_INVITE_GUEST);
     Bind(wxEVT_TIMER, &FriendsListFrame::OnTick, this);
+    Bind(wxEVT_CLOSE_WINDOW, &FriendsListFrame::OnClose, this);
     m_tick.Start(500);
     UpdateStatus();
+}
+
+void FriendsListFrame::OnClose(wxCloseEvent& event)
+{
+    // Closing the main window quits the app. Take the (usually hidden) control
+    // window with it; otherwise it keeps the app running invisibly.
+    m_tick.Stop();
+    std::vector<wxWindow*> others;
+    for (wxWindowList::compatibility_iterator node = wxTopLevelWindows.GetFirst(); node; node = node->GetNext())
+    {
+        if (node->GetData() != this)
+        {
+            others.push_back(node->GetData());
+        }
+    }
+    for (size_t i = 0; i < others.size(); ++i)
+    {
+        others[i]->Destroy();
+    }
+    event.Skip();
 }
 
 void FriendsListFrame::UpdateStatus()

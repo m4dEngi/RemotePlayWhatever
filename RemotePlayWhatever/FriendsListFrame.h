@@ -32,6 +32,7 @@ private:
     void OnFriendPanelClick(wxCommandEvent& event);
     void OnGuestPanelClick(wxCommandEvent& event);
     void OnTick(wxTimerEvent& event);
+    void OnClose(wxCloseEvent& event);
     void UpdateStatus();
 
     wxStaticText* m_status;

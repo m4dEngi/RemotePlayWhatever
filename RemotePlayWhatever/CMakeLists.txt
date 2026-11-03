@@ -59,6 +59,7 @@ endif()
 include(${wxWidgets_USE_FILE})
 
 set(APPSRCs "RemotePlayWhatever.cpp"
+            "ClientVTableByName.h"
             "SteamStuff.h"
             "SteamStuff.cpp"
             "RemoteApp.h"
@@ -69,12 +70,20 @@ set(APPSRCs "RemotePlayWhatever.cpp"
             "QueueInviter.h"
             "FriendsListFrame.h"
             "FriendsListFrame.cpp"
+            "ControlFrame.h"
+            "ControlFrame.cpp"
             "ClickablePanel.h"
             "ClickablePanel.cpp"
             "FriendPanel.h"
             "FriendPanel.cpp"
             "wxSteamStuff.h"
             "wxSteamStuff.cpp"
+            "GameInfo.h"
+            "GameInfo.cpp"
+            "UiHelpers.h"
+            "UiHelpers.cpp"
+            "TrayIcon.h"
+            "TrayIcon.cpp"
 )
 
 
@@ -91,6 +100,10 @@ add_dependencies(RemotePlayWhatever OpenSteamAPI)
 target_compile_definitions(RemotePlayWhatever PRIVATE STEAMWORKS_CLIENT_INTERFACES)
 target_include_directories(RemotePlayWhatever PUBLIC ${OSW_INCLUDE_PATH} ${wxWidgets_INCLUDE_DIRS})
 target_link_libraries(RemotePlayWhatever ${OSW_LIB_PATH} ${wxWidgets_LIBRARIES})
+if(${SYSTEM_OS} STREQUAL "Win")
+    # PlaySound for the guest join/leave sounds.
+    target_link_libraries(RemotePlayWhatever winmm)
+endif()
 if(${SYSTEM_OS} STREQUAL "Linux")
     target_link_libraries(RemotePlayWhatever ${CMAKE_DL_LIBS})
     set_target_properties(RemotePlayWhatever PROPERTIES OUTPUT_NAME "remoteplaywhatever")

@@ -19,6 +19,10 @@ private:
     STEAM_CALLBACK(OneShotInvite, OnRemotePlayInviteResult, RemotePlayInviteResult_t, m_remoteInviteResultCb);
 };
 
+class ControlFrame;
+class FriendsListFrame;
+class wxSingleInstanceChecker;
+
 class RemoteAppCallbackRunner : public wxTimer
 {
 public:
@@ -36,11 +40,15 @@ public:
     virtual bool OnCmdLineParsed(wxCmdLineParser& parser) override;
     virtual void OnInitCmdLine(wxCmdLineParser& parser) override;
 
+    RemotePlayInviteHandler* GetInviteHandler() const { return m_inviteHandler; }
+
 private:
     bool m_oneshot;
 
 
-    wxFrame* m_friendsList;
+    FriendsListFrame* m_friendsList;
+    ControlFrame* m_controlFrame;
+    wxSingleInstanceChecker* m_singleInstance;
     RemoteAppCallbackRunner m_callbackRunner;
 
     std::queue<uint64> m_inviteQue;

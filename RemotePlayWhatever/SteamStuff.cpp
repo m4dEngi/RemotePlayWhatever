@@ -6,12 +6,14 @@
 ClientContext::ClientContext():
     m_hPipe(0),
     m_hUser(0),
+    m_pSteamClient(nullptr),
     m_pSteamUser(nullptr),
     m_pSteamFriends(nullptr),
-    m_pSteamClient(nullptr),
+    m_pSteamUtils(nullptr),
     m_pClientEngine(nullptr),
-    m_pClientRemoteManager(nullptr),
-    m_ShuttingDown(false)
+    m_ShuttingDown(false),
+    m_Initialized(false),
+    m_initError(InitOK)
 {
 }
 
@@ -25,6 +27,9 @@ bool ClientContext::Init()
     {
         return true;
     }
+
+    // Until something more specific is known, failing means Steam isn't there.
+    m_initError = InitSteamNotRunning;
 
     if (!OpenAPI_LoadLibrary())
     {
@@ -46,8 +51,11 @@ bool ClientContext::Init()
     m_hUser = m_pSteamClient->ConnectToGlobalUser(m_hPipe);
     if (!m_hUser)
     {
+        m_initError = InitNotSignedIn;
         return false;
     }
+
+    m_initError = InitMethodsMissing;
 
     m_pSteamUser = (ISteamUser019*)m_pSteamClient->GetISteamUser(m_hUser, m_hPipe, STEAMUSER_INTERFACE_VERSION_019);
     if (!m_pSteamUser)
@@ -73,12 +81,31 @@ bool ClientContext::Init()
         return false;
     }
 
-    m_pClientRemoteManager = (IClientRemoteClientManager*)m_pClientEngine->GetIClientRemoteClientManager(m_hPipe);
-    if (!m_pClientRemoteManager)
+    IClientRemoteClientManager* pRemoteManager =
+        (IClientRemoteClientManager*)m_pClientEngine->GetIClientRemoteClientManager(m_hPipe);
+    if (!pRemoteManager)
     {
         return false;
     }
 
+    // IClientRemoteClientManager is the interface that actually drifts between
+    // builds (Valve keeps adding Remote Play methods), so instead of calling it
+    // through the header's fixed vtable order we resolve each method by name and
+    // call through the resolved index. Confirm the methods we use exist on this
+    // build before anything calls through the proxy.
+    m_remoteManager.Bind(pRemoteManager);
+    m_remoteManager.DebugDump(); // no-op unless RPW_VTDEBUG is set
+    if (!m_remoteManager.Ok()
+        || !m_remoteManager.Has("BCreateRemotePlayInviteAndSession")
+        || !m_remoteManager.Has("ShowRemotePlayTogetherUI"))
+    {
+        clientvt::Log("[vt] Init: RCM method resolution FAILED "
+                      "(ok=%d count=%zu) — refusing to call into wrong slots\n",
+                      (int)m_remoteManager.Ok(), m_remoteManager.Count());
+        return false;
+    }
+
+    m_initError = InitOK;
     return m_Initialized = true;
 }
 
@@ -127,9 +154,9 @@ void ClientContext::RunCallbacks()
     }
 }
 
-IClientRemoteClientManager* ClientContext::RemoteClientManager()
+CRemoteClientManagerByName* ClientContext::RemoteClientManager()
 {
-    return m_pClientRemoteManager;
+    return &m_remoteManager;
 }
 
 // helper functions
@@ -149,6 +176,16 @@ CGameID GetRunningGameID()
     }
 
     return CGameID();
+}
+
+std::string ClickableURL(const char* url)
+{
+    std::string link = url ? url : "";
+    if (!link.empty() && link.find("://") == std::string::npos)
+    {
+        link = "https://" + link;
+    }
+    return link;
 }
 
 

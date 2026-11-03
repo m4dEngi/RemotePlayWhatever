@@ -1,5 +1,6 @@
 #include "ControlFrame.h"
 #include "wxSteamStuff.h"
+#include "UiHelpers.h"
 #ifdef __WXMSW__
 #include <wx/msw/wrapwin.h>
 #endif
@@ -28,6 +29,8 @@ ControlFrame::ControlFrame(RemotePlayInviteHandler* handler) :
     m_lastGuestCount(0),
     m_waitingForNames(false)
 {
+    SetIcons(AppIcons());
+
     m_container = new wxScrolledWindow(this, wxID_ANY);
     m_container->SetScrollRate(0, 10);
     m_sizer = new wxBoxSizer(wxVERTICAL);
@@ -120,9 +123,9 @@ void ControlFrame::OnHotKey(wxKeyEvent& evt)
     bool gave = true;
     switch (evt.GetId())
     {
-    case kHotKeyKeyboard:    gave = !m_handler->AllGuestsHave(0); m_handler->SetAllGuestsInput(0, gave); break;
-    case kHotKeyMouse:       gave = !m_handler->AllGuestsHave(1); m_handler->SetAllGuestsInput(1, gave); break;
-    case kHotKeyController:  gave = !m_handler->AllGuestsHave(2); m_handler->SetAllGuestsInput(2, gave); break;
+    case kHotKeyKeyboard:    gave = !m_handler->AllGuestsHave(0); m_handler->SetAllGuestsInput(0, gave, false); break;
+    case kHotKeyMouse:       gave = !m_handler->AllGuestsHave(1); m_handler->SetAllGuestsInput(1, gave, false); break;
+    case kHotKeyController:  gave = !m_handler->AllGuestsHave(2); m_handler->SetAllGuestsInput(2, gave, false); break;
     case kHotKeyTakeControl: gave = false; m_handler->TakeAllControl(); break;
     case kHotKeyGiveBack:    gave = true;  m_handler->GiveBackControl(); break;
     default:                 return;
@@ -197,7 +200,7 @@ void ControlFrame::AddToggle(wxWindow* parent, wxSizer* sizer, const wxString& l
     {
         if (guestKey == kEveryone)
         {
-            m_handler->SetAllGuestsInput(which, !m_handler->AllGuestsHave(which));
+            m_handler->SetAllGuestsInput(which, !m_handler->AllGuestsHave(which), true);
         }
         else
         {

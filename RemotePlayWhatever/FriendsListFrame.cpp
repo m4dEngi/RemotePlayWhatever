@@ -4,15 +4,22 @@
 #include <wx/time.h>
 #include <cstring>
 #include <vector>
+#ifdef __WXMSW__
+#include <wx/msw/wrapwin.h>
+#endif
 #include "FriendsListFrame.h"
 #include "FriendPanel.h"
+#include "ControlFrame.h"
 #include "GameInfo.h"
+#include "TrayIcon.h"
+#include "UiHelpers.h"
 
 static const wxColour kReadyGreen(30, 130, 50);
 static const wxColour kNoticeOrange(190, 100, 0);
 
 FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
     wxFrame(NULL, wxID_ANY, _("Remote Play Whatever"), wxPoint(50, 50), wxSize(275, 650)),
+    m_tray(nullptr),
     m_search(nullptr),
     m_status(nullptr),
     m_copyLinkButton(nullptr),
@@ -28,6 +35,7 @@ FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
 
     SetMinSize(wxSize(275, 300));
     SetMaxSize(wxSize(350, -1));
+    SetIcons(AppIcons());
 
     m_pRemoteInvite = handler;
 
@@ -95,6 +103,7 @@ FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
     Bind(BTN_PANEL_LEFT_CLICK, &FriendsListFrame::OnGuestPanelClick, this, rpwID_INVITE_GUEST);
     Bind(wxEVT_TIMER, &FriendsListFrame::OnTick, this);
     Bind(wxEVT_CLOSE_WINDOW, &FriendsListFrame::OnClose, this);
+    Bind(wxEVT_ICONIZE, &FriendsListFrame::OnIconize, this);
     m_tick.Start(500);
     UpdateStatus();
 }
@@ -102,22 +111,81 @@ FriendsListFrame::FriendsListFrame(RemotePlayInviteHandler* handler):
 void FriendsListFrame::OnClose(wxCloseEvent& event)
 {
     // Closing the main window quits the app. Take the (usually hidden) control
-    // window with it; otherwise it keeps the app running invisibly.
+    // window and the tray icon with it; otherwise they keep the app running
+    // invisibly. Only our own windows are destroyed here: the tray icon owns
+    // and destroys its own hidden window.
     m_tick.Stop();
-    std::vector<wxWindow*> others;
+    std::vector<wxWindow*> controls;
     for (wxWindowList::compatibility_iterator node = wxTopLevelWindows.GetFirst(); node; node = node->GetNext())
     {
-        if (node->GetData() != this)
+        if (dynamic_cast<ControlFrame*>(node->GetData()))
         {
-            others.push_back(node->GetData());
+            controls.push_back(node->GetData());
         }
     }
-    for (size_t i = 0; i < others.size(); ++i)
+    for (size_t i = 0; i < controls.size(); ++i)
     {
-        others[i]->Destroy();
+        controls[i]->Destroy();
+    }
+    if (m_tray)
+    {
+        m_tray->RemoveIcon();
+        m_tray->Destroy();
+        m_tray = nullptr;
     }
     event.Skip();
 }
+
+void FriendsListFrame::OnIconize(wxIconizeEvent& event)
+{
+    // With a tray icon, minimizing tucks the window away next to the clock.
+    if (event.IsIconized() && m_tray && m_tray->IsIconInstalled())
+    {
+        Hide();
+        m_tray->ShowHiddenHintOnce();
+    }
+    event.Skip();
+}
+
+void FriendsListFrame::ShowFromTray()
+{
+    // Show first, then restore: restoring a hidden window only updates wx's
+    // idea of its state and leaves it minimized once it's shown.
+    if (!IsShown())
+    {
+        Show();
+    }
+    if (IsIconized())
+    {
+        Iconize(false);
+    }
+    Raise();
+#ifdef __WXMSW__
+    ::SetForegroundWindow(GetHWND());
+#endif
+}
+
+void FriendsListFrame::SetTray(RpwTrayIcon* tray)
+{
+    m_tray = tray;
+    if (m_tray)
+    {
+        m_tray->SetStatus(m_statusShown);
+    }
+}
+
+#ifdef __WXMSW__
+WXLRESULT FriendsListFrame::MSWWindowProc(WXUINT msg, WXWPARAM wParam, WXLPARAM lParam)
+{
+    static const UINT showMessage = ::RegisterWindowMessageW(L"RemotePlayWhatever-Show");
+    if (msg == showMessage)
+    {
+        ShowFromTray();
+        return 0;
+    }
+    return wxFrame::MSWWindowProc(msg, wParam, lParam);
+}
+#endif
 
 void FriendsListFrame::UpdateStatus()
 {
@@ -190,6 +258,10 @@ void FriendsListFrame::UpdateStatus()
         m_status->SetForegroundColour(colour);
         m_status->Wrap(FromDIP(235));
         relayout = true;
+        if (m_tray)
+        {
+            m_tray->SetStatus(text);
+        }
     }
     if (m_endButton->IsShown() != session)
     {
@@ -216,6 +288,11 @@ void FriendsListFrame::UpdateStatus()
 
 void FriendsListFrame::OnCopyLink(wxCommandEvent&)
 {
+    CopyGuestLink();
+}
+
+void FriendsListFrame::CopyGuestLink()
+{
     wxString link = wxString::FromUTF8(m_pRemoteInvite->GuestLink().c_str());
     if (!link.empty() && wxTheClipboard->Open())
     {
@@ -229,11 +306,16 @@ void FriendsListFrame::OnCopyLink(wxCommandEvent&)
 
 void FriendsListFrame::OnEndSession(wxCommandEvent&)
 {
+    ConfirmEndSession();
+}
+
+void FriendsListFrame::ConfirmEndSession()
+{
     int answer = wxMessageBox(
         "Disconnect everyone and stop sharing?\n\nUnused invites and guest links will stop working too.",
         "Remote Play Whatever",
         wxYES_NO | wxICON_QUESTION,
-        this
+        IsShown() ? this : nullptr
     );
     if (answer == wxYES)
     {

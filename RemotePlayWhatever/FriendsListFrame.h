@@ -6,6 +6,7 @@
 #include "RemotePlayInviteHandler.h"
 
 class wxSearchCtrl;
+class RpwTrayIcon;
 
 enum ERPWEvtID
 {
@@ -17,6 +18,18 @@ class FriendsListFrame : public wxFrame
 {
 public:
     FriendsListFrame(RemotePlayInviteHandler* handler);
+
+    // Tray icon support: minimizing hides the window to the tray.
+    void SetTray(RpwTrayIcon* tray);
+    void ShowFromTray();
+    void CopyGuestLink();
+    void ConfirmEndSession();
+
+#ifdef __WXMSW__
+    // A second copy of the app asks this one to show itself with a registered
+    // window message (it may be hidden in the tray).
+    virtual WXLRESULT MSWWindowProc(WXUINT msg, WXWPARAM wParam, WXLPARAM lParam) override;
+#endif
 
 private:
     void AddFreiendPanel(CSteamID friendID);
@@ -35,11 +48,13 @@ private:
     void OnGuestPanelClick(wxCommandEvent& event);
     void OnTick(wxTimerEvent& event);
     void OnClose(wxCloseEvent& event);
+    void OnIconize(wxIconizeEvent& event);
     void OnEndSession(wxCommandEvent& event);
     void OnCopyLink(wxCommandEvent& event);
     void UpdateStatus();
     void ApplyFilter();
 
+    RpwTrayIcon* m_tray;
     wxSearchCtrl* m_search;
     wxStaticText* m_status;
     wxButton* m_copyLinkButton;

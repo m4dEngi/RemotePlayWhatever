@@ -76,13 +76,16 @@ public:
     const std::string& GuestLink() const { return m_guestLink; }
 
     // Roster access + per-guest control, driven by the control window UI.
+    // A guest's choices are saved per SteamID and applied when they rejoin.
     const std::vector<ConnectedGuest>& Guests() const { return m_guests; }
     void SetGuestInput(uint64 key, bool kbd, bool mouse, bool ctrl);
 
     // Everyone at once (control window "Everyone" row and hotkeys).
-    // which: 0 = keyboard, 1 = mouse, 2 = controller.
+    // which: 0 = keyboard, 1 = mouse, 2 = controller. With remember, each
+    // guest's new setting is saved for the next time they join (the quick
+    // hotkeys don't save, so they don't change what friends get next time).
     bool AllGuestsHave(int which) const;
-    void SetAllGuestsInput(int which, bool on);
+    void SetAllGuestsInput(int which, bool on, bool remember);
     // Take every peripheral from every guest, remembering what each one had,
     // and give it back later (everything, if nothing was remembered).
     void TakeAllControl();

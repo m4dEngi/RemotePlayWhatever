@@ -1,6 +1,7 @@
 #include <iostream>
 #include "SteamStuff.h"
 #include "RemotePlayInviteHandler.h"
+#include "UiHelpers.h"
 
 RemotePlayInviteHandler::RemotePlayInviteHandler() :
     m_enabledDesktopStreaming(false),
@@ -369,6 +370,7 @@ void RemotePlayInviteHandler::SetGuestInput(uint64 key, bool kbd, bool mouse, bo
             m_guests[i].wantCtrl = ctrl;
             m_guests[i].hasSaved = false;
             ApplyGuest(m_guests[i]);
+            SaveGuestControls(m_guests[i].steamID, kbd, mouse, ctrl);
             ++m_rosterRevision;
             return;
         }
@@ -400,13 +402,18 @@ bool RemotePlayInviteHandler::AllGuestsHave(int which) const
     return true;
 }
 
-void RemotePlayInviteHandler::SetAllGuestsInput(int which, bool on)
+void RemotePlayInviteHandler::SetAllGuestsInput(int which, bool on, bool remember)
 {
     for (size_t i = 0; i < m_guests.size(); ++i)
     {
-        Peripheral(m_guests[i], which) = on;
-        m_guests[i].hasSaved = false;
-        ApplyGuest(m_guests[i]);
+        ConnectedGuest& g = m_guests[i];
+        Peripheral(g, which) = on;
+        g.hasSaved = false;
+        ApplyGuest(g);
+        if (remember)
+        {
+            SaveGuestControls(g.steamID, g.wantKbd, g.wantMouse, g.wantCtrl);
+        }
     }
     ++m_rosterRevision;
 }
@@ -509,10 +516,13 @@ void RemotePlayInviteHandler::OnRemotePlayStart(RemoteClientStartStreamSession_t
     g.wantKbd = true;
     g.wantMouse = true;
     g.wantCtrl = true;              // default: give a new guest full control
+    // ...unless the host chose differently for this friend last time.
+    LoadGuestControls(g.steamID, g.wantKbd, g.wantMouse, g.wantCtrl);
     g.hasSaved = false;
     g.savedKbd = g.savedMouse = g.savedCtrl = false;
     m_guests.push_back(g);
     ++m_rosterRevision;
+    PlayGuestSound(true);
 
     if (g.steamID)
     {
@@ -582,6 +592,7 @@ void RemotePlayInviteHandler::OnRemotePlayStop(RemoteClientStopStreamSession_t* 
         {
             m_guests.erase(m_guests.begin() + i);
             ++m_rosterRevision;
+            PlayGuestSound(false);
             break;
         }
     }

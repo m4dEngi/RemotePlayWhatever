@@ -20,6 +20,7 @@ private:
 };
 
 class ControlFrame;
+class FriendsListFrame;
 class wxSingleInstanceChecker;
 
 class RemoteAppCallbackRunner : public wxTimer
@@ -45,7 +46,7 @@ private:
     bool m_oneshot;
 
 
-    wxFrame* m_friendsList;
+    FriendsListFrame* m_friendsList;
     ControlFrame* m_controlFrame;
     wxSingleInstanceChecker* m_singleInstance;
     RemoteAppCallbackRunner m_callbackRunner;
